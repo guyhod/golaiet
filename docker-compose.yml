@@ -1,0 +1,66 @@
+# The whole stack on the Mac: db + migrate + scheduler + web. restart: always
+# brings everything back with Docker Desktop after a reboot.
+# Host ports: 5435 Postgres (5432 organism, 5433 investment engine, 5434 conflict map), 8003 web.
+x-app: &app
+  build: .
+  env_file: .env
+  environment:
+    DB_HOST: db          # in-network address; .env's localhost:5435 is for host runs
+    DB_PORT: "5432"
+    DJANGO_DEBUG: "false"
+    CLAUDE_CONFIG_DIR: /root/.claude
+  depends_on:
+    db:
+      condition: service_healthy
+    migrate:
+      condition: service_completed_successfully
+
+services:
+  db:
+    image: postgres:16
+    container_name: golaiet-db
+    restart: always
+    environment:
+      POSTGRES_DB: ${DB_NAME:-golaiet}
+      POSTGRES_USER: ${DB_USER:-golaiet}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set in .env}
+    ports:
+      - "127.0.0.1:${DB_PORT:-5435}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-golaiet} -d ${DB_NAME:-golaiet}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  migrate:
+    build: .
+    env_file: .env
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DJANGO_DEBUG: "false"
+    command: python manage.py migrate --noinput
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  scheduler:
+    <<: *app
+    container_name: golaiet-scheduler
+    command: python manage.py run_scheduler
+    volumes:
+      - claude_state:/root/.claude   # CLI session store; --resume survives container recreation
+
+  web:
+    <<: *app
+    container_name: golaiet-web
+    command: gunicorn config.wsgi -b 0.0.0.0:8003 --workers 2
+    ports:
+      - "127.0.0.1:8003:8003"
+
+volumes:
+  pgdata:
+  claude_state:

@@ -1,0 +1,10 @@
+[project]
+name = "golaiet"
+version = "0.1.0"
+description = "One agent that tracks what Guy cares about, tells him when something changes, and shows him where things stand"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings"
+testpaths = ["tests"]
+addopts = "-q"
