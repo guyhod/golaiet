@@ -26,7 +26,7 @@ Exit test, from Telegram:
 2. The first collect run writes at least one observation with a source URL and a cost.
 3. "What's new on VRAM?" is answered from the database, not from a fresh search.
 4. Restart Django mid-conversation; the next message resumes the same session.
-5. A forced billing marker in the CLI output stops the scheduler loop and the heartbeat shows it.
+5. A billing or quota wording in the CLI output marks the run FAILED with a `billing:` summary and sends one Telegram notice; later failures of the same job within the hour stay in admin.
 
 Not in Phase 0: dashboard, assessments, alerts, focus, any kind but
 `topic`, memory files, more than one chat.

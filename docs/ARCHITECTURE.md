@@ -29,7 +29,7 @@ dashboard decides nothing: it draws what the database says.
 
 | Component | Responsibility | Taken from |
 |---|---|---|
-| `channels/telegram` | Long-poll `getUpdates`; one `Conversation` per chat; each inbound `Message` becomes an immediate `reply` job; outbound `sendMessage` with Markdown → plain-text fallback | Organism `bridges/telegram.py`, investment_engine `core/notifications.py` |
+| `chat/` | Long-poll `getUpdates`; one `Conversation` per chat; each inbound `Message` runs the `reply` job off-schedule through the same dispatcher as scheduled jobs; outbound `sendMessage` with Markdown → plain-text fallback | Organism `bridges/telegram.py`, investment_engine `core/notifications.py` |
 | `scheduler/` | `Job` rows define the schedule; a single process re-syncs APScheduler from the table every 30 s; `JobRun` is the run log, cost ledger and heartbeat | investment_engine `scheduler/` (models, jobs, dispatcher, market_hours) |
 | `agent/` | Builds the prompt, runs the Claude CLI headless with the MCP config, parses JSON, retries unparseable replies, aborts the whole loop on billing markers, tallies cost | investment_engine `scheduler/runner.py` + `agent_flow.py`; conflict map `research/runner.py` |
 | `agent/tools` (MCP server) | The agent's only way to touch Golaiet: typed tools over the Django ORM (§5) | new |
@@ -75,7 +75,7 @@ the level changes. Failed sends retry for 24 h (investment_engine rule).
 
 ### job
 tracker FK (nullable) · kind (`reply` / `collect` / `assess` / `digest` /
-`heartbeat`) · trigger (`immediate` / `interval:15m` / `cron:0 7 * * *`) ·
+`heartbeat`) · trigger (`cron` / `interval` / `manual`) · schedule ·
 target (dotted path for scripts, `agent` for a session) · params JSON ·
 market_hours_only · enabled · next_run_at · conversation FK (reply jobs)
 
@@ -100,8 +100,8 @@ FK · note. Null tracker means overview.
 ## 4. Flows
 
 ### 4.1 Telegram message → reply
-1. Poller receives an update, stores `Message(in)`, creates `Job(kind=reply, trigger=immediate, conversation=C)`.
-2. Scheduler claims it, runs `claude -p --resume C.session_id` with the Golaiet system prompt and the MCP tools.
+1. Poller receives an update, stores `Message(in)`, and calls `execute_job(reply, message_id=…)`: the one `reply` row (trigger `manual`, never scheduled) gets a `JobRun` per message, so an off-schedule run is not a different kind of run.
+2. The dispatcher runs `claude -p --resume C.session_id` with the Golaiet system prompt and the MCP tools.
 3. Agent reads trackers through tools, may call `set_focus`, answers.
 4. Runner stores `session_id` on C, stores `Message(out)`, sends it. One job, one reply.
 
@@ -150,11 +150,12 @@ weekly summary of `Life/Golaiet` once that tracker kind exists.
 | `search_observations(query, slug?, since?)` | full-text over summaries |
 
 Reply sessions get all tools plus WebSearch/WebFetch. Collect sessions get
-only `record_observation` plus the web tools. No session gets Bash.
+only `record_observation` plus the web tools. No session has Bash or the
+file tools at all (`--tools` narrows the built-ins; MCP tools are unaffected).
 
 ## 6. Agent runtime
 
-- **Runtime:** Claude Code CLI, headless: `claude -p --safe-mode --output-format json --mcp-config agent/mcp.json`. `--safe-mode` keeps web search and cut a research call from 49k tokens to 414 in the conflict map. `--bare` is never used: it strips the web tools.
+- **Runtime:** Claude Code CLI, headless: `claude --print --output-format json --mcp-config <per-run file> --strict-mcp-config`. **`--safe-mode` is never used**: probed 2026-10-09, it disables every MCP server including the one on the command line (init reported none). `--bare` is never used either: it strips the web tools. Host customisations are kept out by pointing `CLAUDE_CONFIG_DIR` at a directory of our own (the same tool probe: 27 s and 67k input tokens with the host config, 4 s and 50k with a clean one) and `--tools WebSearch,WebFetch` leaves Bash and the file tools out of the session entirely.
 - **Identity:** one agent, "Golaiet". System prompt in `agent/CLAUDE.md`, versioned in this repo. A prompt says what to do; it never repeats a value that lives in the data (practice lists and thresholds went stale in `Life/Golaiet` prompts).
 - **Continuity:** per-conversation `--resume`. A stale session id degrades to a fresh session and the new id is stored (Organism rule).
 - **Thinking cap** on reply sessions (the conflict map's ask box went from 80 s to 14 s with a 1,500-token cap). No cap on collect sessions.
@@ -177,7 +178,7 @@ goes through the Django ORM, in whichever process it happens.
 
 The MCP server is not a wrapper around Django. It **is** a Django process,
 the same code and settings as `web` and `scheduler`, whose only job is to
-expose nine functions to the CLI over a pipe.
+expose the agent's functions (six in Phase 0, nine by Phase 1) to the CLI over a pipe.
 
 ```
 Guy ──Telegram──▶ scheduler.poller ─▶ Message(in) + Job(reply)   [ORM → Postgres]
@@ -186,8 +187,8 @@ Guy ──Telegram──▶ scheduler.poller ─▶ Message(in) + Job(reply)   [
                         │ builds prompt (system prompt + tracker summary + message)
                         │ spawns:
                         ▼
-                  claude -p --safe-mode --output-format json --resume <session>
-                         --mcp-config agent/mcp.json --allowedTools "mcp__golaiet__*,WebSearch,WebFetch"
+                  claude --print --output-format json --resume <session> --mcp-config agent/runs/mcp-<uuid>.json
+                         --strict-mcp-config --allowedTools "mcp__golaiet__*,WebSearch,WebFetch" --tools WebSearch,WebFetch
                         │
                         │ reads mcp.json → spawns its own child:
                         ├──────────────▶ python manage.py mcp_tools   (Django + ORM, stdio)

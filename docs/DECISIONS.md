@@ -71,6 +71,11 @@ Django. A separate process cannot call a Python function in ours. Something
 has to cross that boundary, and the three ways are an MCP server (stdio),
 an HTTP API, or letting the model run Bash. MCP is the typed one.
 
+**Probed 2026-10-09 on this Mac (CLI 2.1.296):** with `--mcp-config` and
+`--strict-mcp-config` the server connects and the model calls the tool
+(`SUM=42 RUN=run-42`, env passthrough confirmed). With `--safe-mode` added,
+the init report lists no MCP servers at all, so safe mode is out.
+
 The one way to make the tools *literally* plain Python functions is to host
 the model loop inside our own process with the Claude Agent SDK. Verified
 against the SDK docs on 2026-10-09:
