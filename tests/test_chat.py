@@ -33,3 +33,14 @@ def test_handle_update_runs_reply_job(settings, monkeypatch):
 @pytest.mark.django_db
 def test_stored_offset_empty_is_none():
     assert poller.stored_offset() is None
+
+
+def test_get_updates_failure_names_status_not_token(monkeypatch, settings):
+    import httpx
+    from chat import telegram
+    settings.TELEGRAM_BOT_TOKEN = "123:SECRET"
+    settings.TELEGRAM_CHAT_ID = "1"
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: httpx.Response(409, json={"ok": False, "description": "Conflict: webhook is active"}))
+    with pytest.raises(RuntimeError) as failure:
+        telegram.get_updates(None)
+    assert "http 409 Conflict: webhook is active" in str(failure.value) and "SECRET" not in str(failure.value)

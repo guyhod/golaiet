@@ -5,11 +5,32 @@ session and never sends anything unasked.
 
 stdout is the protocol channel: nothing here may print. Django's logging goes
 to stderr, which the CLI collects."""
+import functools
 import os
 
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.core.management.base import BaseCommand
 
 from agent import tools
+
+
+def as_tool(function):
+    """The function with its refusals made readable. The MCP package reports
+    any plain exception as "Error executing tool X" and keeps the message to
+    itself; only its ToolError passes the text through. A collect session
+    on 2026-10-09 tried record_observation twice, got that blank error
+    twice, and filed nothing, so every refusal a tool makes on purpose (bad
+    field, unknown slug, missing value) is re-raised as a ToolError here."""
+    from mcp.server.mcpserver.exceptions import ToolError
+
+    @functools.wraps(function)
+    def guarded(*args, **kwargs):
+        try:
+            return function(*args, **kwargs)
+        except (ValueError, ObjectDoesNotExist, ValidationError) as exc:
+            raise ToolError(f"{function.__name__}: {exc}") from exc
+
+    return guarded
 
 
 class Command(BaseCommand):
@@ -24,5 +45,5 @@ class Command(BaseCommand):
 
         server = MCPServer("golaiet", instructions="Golaiet's trackers and observations.")
         for function in tools.ALL:
-            server.add_tool(function)
+            server.add_tool(as_tool(function))
         server.run(transport="stdio")

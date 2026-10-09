@@ -51,10 +51,16 @@ def get_updates(offset: int | None) -> list[dict]:
     if offset is not None:
         params["offset"] = offset
     response = httpx.post(_url("getUpdates"), json=params, timeout=POLL_WAIT_SEC + 10)
-    response.raise_for_status()
-    body = response.json()
-    if not body.get("ok"):
-        raise RuntimeError(f"getUpdates not ok: {body}")
+    try:
+        body = response.json()
+    except ValueError:
+        body = {}
+    if response.status_code != 200 or not body.get("ok"):
+        # Not raise_for_status(): httpx puts the request URL, token included,
+        # in that exception's message, and the poller logs it. 409 here means
+        # a webhook is still registered on the bot (the Organism set one;
+        # removed 2026-10-09) or a second poller is running.
+        raise RuntimeError(f"getUpdates failed: http {response.status_code} {body.get('description', '')}")
     return body.get("result", [])
 
 
