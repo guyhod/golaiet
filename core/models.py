@@ -12,6 +12,29 @@ from . import kinds
 
 
 class Tracker(models.Model):
+    """One thing Guy follows: VRAM pricing, the risk of war in Israel, a stock,
+    antisemitism in Europe. A tracker is the unit everything else hangs off.
+
+    What it is made of:
+    - `subject`: what is tracked, as JSON shaped by the kind
+      ({"query": "GDDR7 and HBM pricing"}, {"iso3": "ISR"}, {"ticker": "CEG", "good_below": 170}).
+    - `kind`: how it is tracked. A module under core/kinds that owns the subject
+      and payload schemas, the ordered levels, the prompts that collect and judge,
+      the alert rule and the default jobs (`topic` today; `country_risk`, `stock`,
+      `campaign` to follow).
+    - `brief`: the standing instructions in plain text, rendered into every prompt
+      for this tracker. The thesis lives here, where Guy can read and edit it.
+    - `view` / `view_params`: how the dashboard shows it when it has focus.
+
+    What it produces: its jobs (scheduler.Job rows pointing at it) run on a
+    schedule and write Observations (dated, sourced facts) and Assessments
+    (judgments with a level); a level change becomes an Alert delivered to
+    Telegram; set_focus puts it on screen.
+
+    A tracker is rows, never code: Guy asks for one in Telegram, the agent calls
+    create_tracker, and the kind's default jobs are created with it. Only a new
+    kind is a code change."""
+
     class Status(models.TextChoices):
         ACTIVE = "active"
         PAUSED = "paused"
