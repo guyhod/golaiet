@@ -12,7 +12,12 @@ MANAGE = Path(__file__).resolve().parent.parent / "manage.py"
 
 
 def call_through_server(method: str, params: dict, timeout: float = 20) -> dict:
-    env = dict(os.environ, GOLAIET_JOB_RUN_ID="")
+    """The child process gets the database pytest-django is using by name, so
+    a call sees the same (test) tables the test does. Without this it opened
+    the dev database by its configured name, which on a fresh CI runner has
+    no tables, and the refusal came back masked (2026-10-10)."""
+    from django.db import connection
+    env = dict(os.environ, GOLAIET_JOB_RUN_ID="", DB_NAME=connection.settings_dict["NAME"])
     server = subprocess.Popen([sys.executable, str(MANAGE), "mcp_tools"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                               stderr=subprocess.PIPE, text=True, env=env, bufsize=1)
 
@@ -53,7 +58,7 @@ def test_tools_list_keeps_names_docs_and_schemas():
 
 @pytest.mark.django_db(transaction=True)
 def test_refusals_reach_the_model_as_text():
-    """The child process sees the real database, so this needs a committed
+    """The child process has its own connection, so this needs a committed
     transaction (transaction=True) and a tracker that is not there."""
     result = call_through_server("tools/call", {"name": "record_observation", "arguments": {
         "slug": "no-such-tracker", "observed_at": "2026-10-01", "source_url": "https://x.example/1", "summary": "s"}})
