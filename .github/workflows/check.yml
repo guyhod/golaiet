@@ -1,0 +1,38 @@
+# Every push and pull request: the same targets as `make check`. A red check
+# is a change that does not ship.
+name: check
+on: [push, pull_request]
+
+env:
+  DB_PASSWORD: ci
+  DJANGO_SECRET_KEY: ci
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:16
+        env:
+          POSTGRES_DB: golaiet
+          POSTGRES_USER: golaiet
+          POSTGRES_PASSWORD: ci
+        ports: ["5435:5432"]
+        options: --health-cmd "pg_isready -U golaiet" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python -m pytest
+      - run: python manage.py makemigrations --check --dry-run
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+      - run: npm --prefix dashboard ci --no-audit --no-fund
+      - run: npm --prefix dashboard run typecheck
+      - run: npm --prefix dashboard test

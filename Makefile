@@ -1,6 +1,6 @@
 PY := ./.venv/bin/python
 
-.PHONY: up stack logs down migrate run scheduler dashboard-dev test superuser shell
+.PHONY: up stack logs down migrate run scheduler dashboard-dev check test test-dashboard superuser shell
 
 up:            ## Postgres only (host dev: make run / make scheduler)
 	docker compose up -d db
@@ -26,8 +26,16 @@ scheduler:     ## the job loop + Telegram poller (the only APScheduler registrar
 dashboard-dev: ## Vite dev server on 5174 with /api proxied to 8003 (host dev)
 	cd dashboard && npm install && npm run dev
 
-test:
+check: test test-dashboard   ## what CI runs on every push: unit tests, migrations current, dashboard typecheck + tests
+
+test:          ## pytest against the Postgres on 5435, then: every model change has its migration
 	$(PY) -m pytest
+	$(PY) manage.py makemigrations --check --dry-run
+
+test-dashboard:
+	npm --prefix dashboard ci --no-audit --no-fund
+	npm --prefix dashboard run typecheck
+	npm --prefix dashboard test
 
 superuser:
 	$(PY) manage.py createsuperuser
