@@ -28,6 +28,12 @@ COPY agent/ agent/
 COPY api/ api/
 COPY entrypoint.sh ./
 
+# The dashboard is built here and collected with the other static files.
+COPY dashboard/package.json dashboard/package-lock.json dashboard/
+RUN cd dashboard && npm ci --no-audit --no-fund
+COPY dashboard/ dashboard/
+RUN cd dashboard && npm run build
+
 RUN DJANGO_SECRET_KEY=build-placeholder python manage.py collectstatic --noinput
 
 ENTRYPOINT ["/bin/sh", "/app/entrypoint.sh"]

@@ -57,7 +57,9 @@ services:
   web:
     <<: *app
     container_name: golaiet-web
-    command: gunicorn config.wsgi -b 0.0.0.0:8003 --workers 2
+    # Threaded workers: the dashboard holds /api/focus/stream open, and a sync
+    # worker would be parked on it for as long as the screen is on.
+    command: gunicorn config.wsgi -b 0.0.0.0:8003 --workers 2 --worker-class gthread --threads 8
     ports:
       - "127.0.0.1:8003:8003"
 

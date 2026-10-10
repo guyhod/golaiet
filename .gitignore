@@ -11,6 +11,10 @@ __pycache__/
 # Django
 staticfiles/
 
+# Dashboard build and dependencies (make dashboard)
+dashboard/node_modules/
+dashboard/dist/
+
 # Agent run artifacts (per-run MCP config files, CLI output tails)
 agent/runs/
 

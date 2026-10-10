@@ -39,10 +39,14 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "config.urls"
 
+# The dashboard is a Vite build (dashboard/dist): its index.html is served at /
+# as a template, its hashed assets as static files under /static/.
+DASHBOARD_DIST = BASE_DIR / "dashboard" / "dist"
+
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [DASHBOARD_DIST],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -80,6 +84,7 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_DIRS = [DASHBOARD_DIST] if DASHBOARD_DIST.is_dir() else []
 STORAGES = {
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
 }
