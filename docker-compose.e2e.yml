@@ -1,0 +1,43 @@
+# The end-to-end stack: the compose file as deployed, with Claude and Telegram
+# replaced by the fakes under tests/e2e and the dashboard on 8013, so a run
+# never touches the live stack or its data. Used as:
+#   docker compose -p golaiet-e2e -f docker-compose.yml -f docker-compose.e2e.yml up
+services:
+  db:
+    container_name: golaiet-e2e-db
+    restart: "no"
+    ports: !reset []
+
+  scheduler:
+    container_name: golaiet-e2e-scheduler
+    restart: "no"
+    environment:
+      TELEGRAM_API_BASE: http://telegram:8081
+      TELEGRAM_BOT_TOKEN: fake
+      TELEGRAM_CHAT_ID: "1"
+      CLAUDE_BIN: /app/tests/e2e/fake_claude.py
+      CLAUDE_CODE_OAUTH_TOKEN: ""
+      ANTHROPIC_API_KEY: ""
+    volumes:
+      - ./tests:/app/tests:ro
+    depends_on:
+      telegram:
+        condition: service_started
+
+  web:
+    container_name: golaiet-e2e-web
+    restart: "no"
+
+  dashboard:
+    container_name: golaiet-e2e-dashboard
+    restart: "no"
+    ports: !override ["127.0.0.1:8013:80"]
+
+  telegram:
+    image: python:3.11-slim
+    container_name: golaiet-e2e-telegram
+    command: python /e2e/fake_telegram.py 8081
+    volumes:
+      - ./tests/e2e:/e2e:ro
+    ports:
+      - "127.0.0.1:8081:8081"

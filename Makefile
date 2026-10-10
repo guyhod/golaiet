@@ -1,6 +1,7 @@
 PY := ./.venv/bin/python
+E2E := docker compose -p golaiet-e2e -f docker-compose.yml -f docker-compose.e2e.yml
 
-.PHONY: up stack logs down migrate run scheduler dashboard-dev check test test-dashboard smoke superuser shell
+.PHONY: up stack logs down migrate run scheduler dashboard-dev check test test-dashboard smoke e2e superuser shell
 
 up:            ## Postgres only (host dev: make run / make scheduler)
 	docker compose up -d db
@@ -41,6 +42,14 @@ smoke:         ## the compose stack answers: run after make stack (SMOKE_URL ove
 	docker compose ps --status running --services | grep -qx scheduler
 	docker compose logs scheduler | grep -q "scheduler starting"
 	$(PY) -m pytest -m smoke tests/smoke
+
+e2e:           ## the real chain with Claude and Telegram faked: a fresh stack on 8013, Playwright at the screen
+	$(E2E) down -v --remove-orphans
+	$(E2E) up -d --build --wait
+	$(E2E) run --rm migrate python manage.py seed_jobs
+	cd dashboard && npx playwright test; status=$$?; cd ..; \
+	  if [ $$status -ne 0 ]; then $(E2E) logs scheduler telegram; fi; \
+	  $(E2E) down -v; exit $$status
 
 superuser:
 	$(PY) manage.py createsuperuser

@@ -24,3 +24,7 @@ agent/runs/
 # .claude-state/ is the CLI state dir for host runs (settings.CLAUDE_CONFIG_DIR)
 .claude-state/
 dashboard/tsconfig.tsbuildinfo
+
+# Playwright output (make e2e)
+dashboard/test-results/
+dashboard/playwright-report/

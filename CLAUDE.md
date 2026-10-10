@@ -46,8 +46,28 @@ make up && make migrate          # Postgres on 5435, then the schema
 make scheduler                   # job loop + Telegram poller
 make run                         # Django admin + API on 8003
 make dashboard-dev               # Vite on 5174, /api proxied to 8003
-make test
+make check                       # what CI runs on every push: pytest + migrations current + dashboard typecheck/Vitest
+make smoke                       # after make stack: the deployed stack answers through nginx
+make e2e                         # the chain with Claude and Telegram faked, Playwright at the screen (fresh stack on 8013)
 ```
+
+## Testing
+
+Three layers, and every push runs all three in GitHub Actions
+(`.github/workflows/check.yml`); a red check does not ship.
+
+- **Unit**: `tests/` (pytest against the Postgres on 5435) and the dashboard's
+  `src/**/*.test.ts` (Vitest, pure modules only). A flow test stubs the CLI
+  on `ClaudeRunner.run`; the tool-server test starts the real child process.
+- **Smoke**: `tests/smoke/` against a running stack, `SMOKE_URL` names it.
+  Marked `smoke`, so the default pytest run leaves it out.
+- **End to end**: `docker-compose.e2e.yml` layers the fakes over the compose
+  file. `tests/e2e/fake_claude.py` answers the CLI's command line with a
+  scripted tool call over the real MCP server; `tests/e2e/fake_telegram.py`
+  serves the two Bot API methods plus `/test/inbound` and `/test/outbound`
+  for the driver. `dashboard/e2e/*.e2e.ts` are the scenarios: Phase 1's exit
+  tests, and each phase adds its own. Claude and Telegram are the only fakes;
+  a scenario that needs a third fake is asking for a seam, not a fake.
 
 ## Layout
 
@@ -60,7 +80,8 @@ agent/       runner.py (CLI subprocess), tools.py (the functions), prompts.py,
              management/commands/mcp_tools.py (the tool server), flows/{reply,collect,assess,research}.py
 api/         django-ninja read-only API (health, trackers, alerts, focus + its SSE stream)
 dashboard/   Vite + React app with its own Dockerfile (node build → nginx) and nginx.conf;
-             src/views/ is the view registry (feed, globe), src/views/globe/ the MapLibre globe
-tests/       pytest-django
+             src/views/ is the view registry (feed, globe), src/views/globe/ the MapLibre globe;
+             e2e/ the Playwright scenarios (playwright.config.ts)
+tests/       pytest-django; smoke/ (against a running stack), e2e/ (the fakes behind docker-compose.e2e.yml)
 docs/        the planning documents
 ```

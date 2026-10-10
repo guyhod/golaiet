@@ -54,3 +54,17 @@ jobs:
         run: docker compose logs
       - if: always()
         run: docker compose down -v
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: printf 'DB_PASSWORD=ci\nDJANGO_SECRET_KEY=ci\n' > .env
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+      - run: npm --prefix dashboard ci --no-audit --no-fund
+      - run: npx --prefix dashboard playwright install --with-deps chromium
+      - run: make e2e

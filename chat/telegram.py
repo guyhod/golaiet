@@ -15,7 +15,6 @@ from django.conf import settings
 
 log = logging.getLogger(__name__)
 
-API = "https://api.telegram.org/bot{token}/{method}"
 MAX_MESSAGE_LEN = 4000
 POLL_WAIT_SEC = 30
 
@@ -25,7 +24,7 @@ def configured() -> bool:
 
 
 def _url(method: str) -> str:
-    return API.format(token=settings.TELEGRAM_BOT_TOKEN, method=method)
+    return f"{settings.TELEGRAM_API_BASE}/bot{settings.TELEGRAM_BOT_TOKEN}/{method}"
 
 
 def send(text: str, *, chat_id: str | None = None) -> int | None:
