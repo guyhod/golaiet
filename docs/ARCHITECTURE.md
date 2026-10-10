@@ -18,7 +18,7 @@ code moves across without translation.
   Dashboard ◀── GET /api/* , SSE focus ──│                   PostgreSQL                     │
   (React, served by Django)              └───────────────────────▲──────────────────────────┘
                                                                  │ MCP tools (stdio)
-                                                 claude -p --safe-mode --output-format json
+                                                 claude -p --output-format json --mcp-config …
                                                  (one session per conversation; one per job run)
 ```
 
@@ -60,18 +60,23 @@ cannot duplicate) · kind · payload JSON (validated by tracker kind) ·
 summary · job_run FK
 
 ### assessment  (judgments, append-only)
-tracker FK · at · state JSON (`level`, `score`, `trend` as the kind
-defines) · reason TEXT · evidence (observation ids) · model · cost_usd ·
-job_run FK
+tracker FK · at · state JSON (`level`, `score` as the kind defines; the
+kind's `LEVELS` tuple orders them coolest first) · reason TEXT · evidence
+(M2M to observation) · job_run FK. Model and cost are on the job run, not
+repeated here.
 
 Store the judgment with its date and reason; derive everything that can go
 stale (conflict map decision D5 and `Life/Golaiet`'s "the counter is never
 stored" rule).
 
 ### alert
-tracker FK · assessment FK (nullable) · level · text · created_at ·
-delivered_at · delivery_error. One open alert per (tracker, level) until
-the level changes. Failed sends retry for 24 h (investment_engine rule).
+tracker FK · assessment FK (nullable) · level · text · job_run FK ·
+created_at · delivered_at · delivery_error. Raised by the kind's rule inside
+`record_assessment` (level change) or by `raise_alert`; delivered by the flow
+after the CLI has exited (`chat/alerts.py`), never by the tool server. The
+tracker's latest alert is the open one: `raise_alert` at the same level
+returns it instead of a second row. A failed send is recorded, not retried,
+until a failed send is actually observed.
 
 ### job
 tracker FK (nullable) · kind (`reply` / `collect` / `assess` / `digest` /
@@ -116,9 +121,9 @@ bad brief costs nothing.
 ```
 collect job  : fresh session, prompt = kind template + tracker.brief + last N observations
                tools: WebSearch, WebFetch, record_observation          → observations
-assess job   : fresh session or deterministic script (kind decides)
-               reads observations since last assessment               → assessment
-alert rule   : kind.decide(previous assessment, new assessment)       → alert → Telegram
+assess job   : fresh session, no built-in tools (--tools ""), or a script (kind decides)
+               reads observations filed since the last assessment; skips if none → assessment
+alert rule   : kind.alert_for(previous, new), applied by record_assessment     → alert → Telegram
 ```
 Deterministic kinds (`stock` price monitor) skip the session entirely: a
 script writes the observation and the threshold rule writes the alert. That
@@ -144,13 +149,15 @@ weekly summary of `Life/Golaiet` once that tracker kind exists.
 | `create_tracker(slug, title, kind, subject, brief, cadence)` | creates tracker + default jobs |
 | `update_tracker(slug, brief?, cadence?, status?)` | prefer this over a second tracker on the same subject |
 | `record_observation(slug, observed_at, source_url, summary, payload)` | validated by kind; duplicate URL is a no-op |
-| `record_assessment(slug, state, reason, evidence_ids)` | append-only |
-| `raise_alert(slug, level, text)` | for judgment-based alerts; deterministic ones come from kind rules |
-| `set_focus(slug?, view_params?)` | null clears to overview |
+| `record_assessment(slug, state, reason, evidence_ids)` | append-only; applies the kind's alert rule |
+| `raise_alert(slug, level, text)` | for judgment-based alerts outside the level rule; returns the open alert at the same level |
+| `set_focus(slug?, view_params?, note?)` | no slug clears to the overview |
 | `search_observations(query, slug?, since?)` | full-text over summaries |
 
 Reply sessions get all tools plus WebSearch/WebFetch. Collect sessions get
-only `record_observation` plus the web tools. No session has Bash or the
+only `record_observation` plus the web tools. Assess sessions get
+`record_assessment` and `raise_alert` and no built-in tool at all
+(`--tools ""`, probed 2026-10-10: the MCP tools stay). No session has Bash or the
 file tools at all (`--tools` narrows the built-ins; MCP tools are unaffected).
 
 ## 6. Agent runtime
@@ -170,7 +177,7 @@ goes through the Django ORM, in whichever process it happens.
 | Process | Lifetime | What it is |
 |---|---|---|
 | PostgreSQL | always | `docker compose`, port 5435 |
-| `web` | always | Django under uvicorn: `/api/*`, SSE focus stream, serves the dashboard |
+| `web` | always | Django under gunicorn (threaded workers, so an open focus stream does not park one): `/api/*`, SSE focus stream, serves the dashboard |
 | `scheduler` | always | `manage.py run_scheduler`: APScheduler loop, the Telegram long-poll thread, the agent runner |
 | `claude` | per run | Anthropic's CLI, started by the scheduler, logged in with Guy's plan |
 | `mcp_tools` | per run | `manage.py mcp_tools`: a Django process started **by the CLI**, speaks MCP over stdin/stdout |
@@ -308,11 +315,11 @@ that, and the scheduler bounds parallelism anyway.
 
 ## 7. Dashboard
 
-- One Vite + React app, built to static files, served by Django at `/`. No `file://`, no Obsidian Sync hop, so the kiosk opens a URL.
-- Shell: header (freshness, last run, stale banner after N hours, alert banner), main view, drawer.
+- One Vite + React app (`dashboard/`, no other dependencies), built to static files, served by Django at `/`: `dist/index.html` as a template, the hashed assets under `/static/`. No `file://`, no Obsidian Sync hop, so the kiosk opens a URL. `make dashboard` builds it on the host; the image builds it before `collectstatic`.
+- Shell: header (heartbeat time, stale banner when the health endpoint says so, the latest alert of the last 24 h), main view. The drawer arrives with the globe.
 - **View registry:** `{ feed, globe, price, campaign_map }`. A tracker kind names its view. `feed` is generic: assessment tile, observation list, provenance to sources. Every tracker gets `feed` for free on day one.
-- Overview (no focus): tiles of all active trackers by latest level, hottest first. Click a tile: local drill-down into its view.
-- Focus event: switch to the tracker's view with the pushed parameters.
+- Overview (no focus): tiles of all active trackers by latest level, hottest first (`level_rank` from the API, so the app knows no kind's levels). Click a tile: local drill-down into its view.
+- Focus event (`/api/focus/stream`, one event per change, reconnects by itself): switch to the tracker's view with the pushed parameters, or back to the overview. Data refreshes once a minute; focus is immediate.
 - Geometry ships with the app; no network at render time (conflict map rule, keeps a static export possible).
 
 ## 8. Deployment

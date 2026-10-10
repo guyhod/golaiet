@@ -3,10 +3,12 @@
 One agent that tracks the things Guy cares about, tells him when something
 changes, and shows him where things stand.
 
-**Status: Phase 0 built (2026-10-09).** Telegram ↔ agent ↔ database with
-scheduled collection: say "track X weekly" in Telegram and a tracker, its
-collect job and its first observations follow. No dashboard yet; that is
-Phase 1 in [docs/ROADMAP.md](docs/ROADMAP.md). How to run: [CLAUDE.md](CLAUDE.md).
+**Status: Phase 1 built (2026-10-10).** Say "track X weekly" in Telegram and
+a tracker, its collect and assess jobs and its first observations follow; the
+weekly judge records a level with its reason and a level change reaches
+Telegram; the dashboard at `/` shows every tracker as a tile and "show me X"
+in chat moves it. Next: the globe, Phase 2 in [docs/ROADMAP.md](docs/ROADMAP.md).
+How to run: [CLAUDE.md](CLAUDE.md).
 
 ## Why one project
 

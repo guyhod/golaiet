@@ -47,6 +47,14 @@ Exit test:
 Not in Phase 1: globe, metro map, price panel, filters, drill-down beyond
 the tracker's own observations.
 
+Built 2026-10-10. Exit tests 1–3 passed live on the Mac (the judge filed an
+assessment at `elevated` on two observations and one alert reached
+Telegram; "Show me VRAM on the screen" and "Show everything" moved the focus
+row through the agent in about 5 s each); test 4 relies on the health
+endpoint's 65-minute threshold, unit-tested. Deliberately left out until an
+incident asks for it: retrying failed alert deliveries (an alert that did not
+land keeps `delivered_at` empty and says why in admin).
+
 ## Phase 2: war risk and topics
 
 Build: `kinds/country_risk` ported from the conflict map (research prompt,
