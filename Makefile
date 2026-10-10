@@ -1,6 +1,6 @@
 PY := ./.venv/bin/python
 
-.PHONY: up stack logs down migrate run scheduler dashboard-dev check test test-dashboard superuser shell
+.PHONY: up stack logs down migrate run scheduler dashboard-dev check test test-dashboard smoke superuser shell
 
 up:            ## Postgres only (host dev: make run / make scheduler)
 	docker compose up -d db
@@ -36,6 +36,11 @@ test-dashboard:
 	npm --prefix dashboard ci --no-audit --no-fund
 	npm --prefix dashboard run typecheck
 	npm --prefix dashboard test
+
+smoke:         ## the compose stack answers: run after make stack (SMOKE_URL overrides the port)
+	docker compose ps --status running --services | grep -qx scheduler
+	docker compose logs scheduler | grep -q "scheduler starting"
+	$(PY) -m pytest -m smoke tests/smoke
 
 superuser:
 	$(PY) manage.py createsuperuser

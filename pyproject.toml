@@ -7,4 +7,5 @@ requires-python = ">=3.11"
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings"
 testpaths = ["tests"]
-addopts = "-q"
+addopts = "-q -m \"not smoke\""
+markers = ["smoke: needs a running stack (make smoke)"]
