@@ -61,7 +61,7 @@ export function App() {
   const recentAlert = alerts.find(
     (alert) => Date.now() - new Date(alert.created_at).getTime() < ALERT_BANNER_HOURS * 3600_000,
   );
-  const View = open ? viewFor(open.view) : null;
+  const view = open ? viewFor(open.view) : null;
 
   return (
     <div className="app">
@@ -92,9 +92,9 @@ export function App() {
         <Overview trackers={trackers} onOpen={(tracker) => setOpen({ slug: tracker.slug, view: tracker.view, params: {} })} />
       </main>
 
-      {open && View && (
-        <Module onClose={() => setOpen(null)}>
-          <View slug={open.slug} params={open.params} onClose={() => setOpen(null)} />
+      {open && view && (
+        <Module wide={view.wide} onClose={() => setOpen(null)}>
+          <view.component slug={open.slug} params={open.params} onClose={() => setOpen(null)} />
         </Module>
       )}
     </div>

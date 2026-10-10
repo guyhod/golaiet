@@ -10,6 +10,15 @@
   --lvl-2: #d97706; /* elevated */
   --lvl-3: #dc2626; /* critical */
   --lvl-none: #334155;
+  /* Globe heat by level rank: calm, dormant, cold, warm, hot; none is a country without a tracker. */
+  --heat-0: #275a30;
+  --heat-1: #555f6a;
+  --heat-2: #4d71a0;
+  --heat-3: #cc6b00;
+  --heat-4: #ff735d;
+  --heat-none: #303030;
+  --map-water: #202020;
+  --map-selected: #ffffff;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-size: 18px;
   color: var(--text);
@@ -50,6 +59,33 @@ main { flex: 1; padding: 1.2rem 1.4rem; }
 .backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center; padding: 2rem; }
 .module { background: var(--bg); border: 1px solid var(--line); border-radius: 0.8rem; width: min(64rem, 100%); max-height: 88vh;
           overflow-y: auto; padding: 1.4rem 1.8rem; box-shadow: 0 1.5rem 3rem rgba(0, 0, 0, 0.6); }
+.module.wide { width: 100%; height: 92vh; max-height: 92vh; padding: 0; overflow: hidden; }
+
+/* The globe module: map on the left, the country's record on the right. */
+.globe { display: grid; grid-template-columns: 1fr 30rem; height: 100%; }
+.globe-map { position: relative; background: var(--map-water); }
+.globe-canvas { position: absolute; inset: 0; }
+.legend { position: absolute; left: 1rem; bottom: 1rem; margin: 0; padding: 0.6rem 0.8rem; list-style: none; background: rgba(23, 26, 33, 0.9);
+          border: 1px solid var(--line); border-radius: 0.5rem; font-size: 0.8rem; }
+.legend li { display: flex; align-items: baseline; gap: 0.5rem; padding: 0.1rem 0; }
+.legend .swatch { width: 0.8rem; height: 0.8rem; border-radius: 0.2rem; background: var(--heat-colour); align-self: center; }
+.record { overflow-y: auto; padding: 1.2rem 1.4rem; border-left: 1px solid var(--line); }
+.record section { margin-bottom: 1.2rem; }
+.section-label { display: block; color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.3rem; }
+.score { background: var(--panel); border-radius: 0.5rem; padding: 0.9rem 1.1rem; }
+.score-head { display: flex; justify-content: space-between; align-items: baseline; }
+.score-value { font-size: 2.2rem; font-weight: 600; line-height: 1; }
+.score-bar { height: 0.4rem; background: var(--line); border-radius: 0.2rem; margin: 0.6rem 0; overflow: hidden; }
+.score-bar div { height: 100%; background: linear-gradient(90deg, var(--heat-4), var(--heat-0)); }
+.trend { font-size: 0.9rem; font-weight: 600; }
+.trend-improving { color: #22c55e; }
+.trend-worsening { color: #ef4444; }
+.trend-stable { color: var(--muted); }
+.conflict { border-left: 0.3rem solid var(--heat-colour); background: var(--panel); border-radius: 0.3rem; padding: 0.6rem 0.9rem; margin: 0.5rem 0; }
+.conflict-title { font-weight: 600; font-size: 1rem; padding: 0; }
+.conflict-detail { border-top: 1px solid var(--line); margin-top: 0.4rem; padding-top: 0.4rem; }
+.sources { list-style: none; margin: 0; padding: 0; }
+.sources li { padding: 0.15rem 0; }
 
 .feed-head { display: flex; align-items: baseline; gap: 1rem; }
 .feed-head h1 { font-size: 1.8rem; flex: 1; }
@@ -65,9 +101,11 @@ main { flex: 1; padding: 1.2rem 1.4rem; }
 .when { color: var(--muted); white-space: nowrap; }
 .chip { display: inline-block; margin-left: 0.6rem; padding: 0 0.45rem; border: 1px solid var(--line); border-radius: 0.3rem; }
 
-/* Level colour by rank; -1 is a tracker nobody has judged yet. */
-.lvl--1 { --level-colour: var(--lvl-none); }
-.lvl-0 { --level-colour: var(--lvl-0); }
-.lvl-1 { --level-colour: var(--lvl-1); }
-.lvl-2 { --level-colour: var(--lvl-2); }
-.lvl-3 { --level-colour: var(--lvl-3); }
+/* Level colour by rank; -1 is a tracker nobody has judged yet. Tiles use the
+   four-step scale; the globe's legend and conflict cards use the five heats. */
+.lvl--1 { --level-colour: var(--lvl-none); --heat-colour: var(--heat-none); }
+.lvl-0 { --level-colour: var(--lvl-0); --heat-colour: var(--heat-0); }
+.lvl-1 { --level-colour: var(--lvl-1); --heat-colour: var(--heat-1); }
+.lvl-2 { --level-colour: var(--lvl-2); --heat-colour: var(--heat-2); }
+.lvl-3 { --level-colour: var(--lvl-3); --heat-colour: var(--heat-3); }
+.lvl-4 { --level-colour: var(--lvl-3); --heat-colour: var(--heat-4); }

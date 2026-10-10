@@ -4,7 +4,7 @@
 export type Assessment = {
   id: number;
   at: string;
-  state: { level?: string; score?: number };
+  state: { level?: string; score?: number; [field: string]: unknown };
   reason: string;
   evidence_ids: number[];
 };
@@ -23,6 +23,7 @@ export type Tracker = {
   kind: string;
   status: "active" | "paused" | "archived";
   view: string;
+  subject: Record<string, unknown>;
   observations: number;
   latest_observation_at: string | null;
   level: string | null;
