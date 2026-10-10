@@ -1,8 +1,10 @@
 """The tracker kinds: one module per kind, found by name.
 
-A kind owns the shape of a tracker's subject and of its observations' payload,
-the prompt that collects for it, and the jobs a new tracker of that kind gets.
-Adding a kind is a code change; adding a tracker of an existing kind is rows."""
+A kind owns the shape of a tracker's subject, of its observations' payload and
+of its assessments' state; its ordered LEVELS (coolest first); the prompts that
+collect and judge for it; the rule that turns a new assessment into an alert
+(alert_for); and the jobs a new tracker of that kind gets. Adding a kind is a
+code change; adding a tracker of an existing kind is rows."""
 from importlib import import_module
 
 NAMES = ("topic",)
