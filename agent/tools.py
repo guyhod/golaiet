@@ -67,14 +67,20 @@ def _observation_dict(observation: Observation) -> dict:
     }
 
 
+def _cadence_jobs(tracker: Tracker):
+    """The tracker's jobs that follow the cadence word: a kind's fixed schedules
+    (the topic judge an hour after the Monday collect) are not among them."""
+    return tracker.jobs.filter(schedule__in=list(kinds.CADENCES.values()))
+
+
 def _cadence_of(tracker: Tracker) -> str | None:
-    collect = tracker.jobs.filter(kind=Job.Kind.COLLECT).first()
-    if collect is None:
+    job = _cadence_jobs(tracker).first() or tracker.jobs.first()
+    if job is None:
         return None
     for word, crontab in kinds.CADENCES.items():
-        if crontab == collect.schedule:
+        if crontab == job.schedule:
             return word
-    return collect.schedule
+    return job.schedule
 
 
 def _parse_when(value: str, label: str) -> datetime:
@@ -110,14 +116,15 @@ def get_tracker(slug: str, observations: int = 20) -> dict:
 
 
 def create_tracker(slug: str, title: str, kind: str, subject: dict, brief: str, cadence: str) -> dict:
-    """Start tracking something new. slug: short, lowercase, hyphens (e.g. vram-supply).
-    kind: one of the tracker kinds (topic). subject: the kind's fields (topic: {"query": ..., "regions": [...]}).
+    """Start tracking something new. slug: short, lowercase, hyphens (e.g. vram-supply, isr).
+    kind: topic (a web-researched subject) or country_risk (one country's war risk and peace score).
+    subject: the kind's fields (topic: {"query": ..., "regions": [...]}; country_risk: {"iso3": "ISR"}).
     brief: standing instructions for collecting, in full sentences. cadence: hourly, daily or weekly.
     Creates the tracker and its collect job; returns when the first run is."""
     if Tracker.objects.filter(slug=slug).exists():
         raise ValueError(f"tracker {slug!r} already exists; use update_tracker")
     kind_module = kinds.get(kind)
-    kind_module.validate_subject(subject)
+    subject = kind_module.validate_subject(subject)
     if cadence not in kinds.CADENCES:
         raise ValueError(f"cadence must be one of {', '.join(kinds.CADENCES)}")
     if not brief.strip():
@@ -150,7 +157,7 @@ def update_tracker(slug: str, brief: str | None = None, cadence: str | None = No
     if cadence is not None:
         if cadence not in kinds.CADENCES:
             raise ValueError(f"cadence must be one of {', '.join(kinds.CADENCES)}")
-        tracker.jobs.filter(kind=Job.Kind.COLLECT).update(schedule=kinds.CADENCES[cadence])
+        _cadence_jobs(tracker).update(schedule=kinds.CADENCES[cadence])
         changed.append("cadence")
     tracker.save()
     return dict(_tracker_dict(tracker), changed=changed)
@@ -192,12 +199,14 @@ def search_observations(query: str, slug: str | None = None, since: str | None =
 
 def record_assessment(slug: str, state: dict, reason: str, evidence_ids: list[int] | None = None) -> dict:
     """Record your judgment of a tracker; judgments are kept, never edited. state: the kind's fields
-    (topic: {"level": quiet|watch|elevated|critical, "score": 0-100 optional). reason: two to four sentences
+    (topic: {"level": quiet|watch|elevated|critical, "score": 0-100 optional}; country_risk: the record the
+    research request describes). reason: two to four sentences
     citing dates and figures. evidence_ids: ids of this tracker's observations you relied on.
     A change of level raises an alert to Guy by the kind's rule; you need not raise one yourself."""
     tracker = Tracker.objects.get(slug=slug)
     kind_module = kinds.get(tracker.kind)
-    kind_module.validate_state(state)
+    previous = tracker.assessments.order_by("-at").first()
+    state = kind_module.validate_state(state, previous)
     if not reason.strip():
         raise ValueError("reason must not be empty")
     wanted = set(evidence_ids or [])
@@ -205,7 +214,6 @@ def record_assessment(slug: str, state: dict, reason: str, evidence_ids: list[in
     missing = wanted - {observation.pk for observation in evidence}
     if missing:
         raise ValueError(f"evidence_ids are not observations of {slug}: {', '.join(map(str, sorted(missing)))}")
-    previous = tracker.assessments.order_by("-at").first()
     assessment = Assessment.objects.create(tracker=tracker, state=state, reason=reason.strip(), job_run_id=_run_id())
     assessment.evidence.set(evidence)
     alert = None

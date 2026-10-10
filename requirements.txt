@@ -10,6 +10,8 @@ whitenoise>=6.7
 # The agent's tool server (agent/management/commands/mcp_tools.py). 2.x renamed
 # FastMCP to MCPServer; 1.x code does not import.
 mcp>=2.3,<3
+# ISO 3166 for the country_risk kind: code, name and the numeric id the globe's polygons carry.
+pycountry>=24.6
 
 # Test
 pytest>=8.0

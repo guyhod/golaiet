@@ -1,7 +1,7 @@
 """`topic`: anything described by a query the agent researches on the web —
 antisemitism by region, VRAM supply and pricing, a company's hiring. The
 generic kind; three of the four requests in the brief need nothing else."""
-from core.kinds import validate
+from core.kinds import level_change_alert, validate
 
 VIEW = "feed"
 
@@ -45,20 +45,14 @@ def validate_payload(payload: dict) -> dict:
     return validate(payload, PAYLOAD_SCHEMA, "payload")
 
 
-def validate_state(state: dict) -> dict:
+def validate_state(state: dict, previous=None) -> dict:
     validate(state, STATE_SCHEMA, "state")
     if state["level"] not in LEVELS:
         raise ValueError(f"state.level must be one of {', '.join(LEVELS)}, got {state['level']!r}")
     return state
 
 
-def alert_for(tracker, previous, new) -> str | None:
-    """The alert rule: a level change is told to Guy, the same level again is
-    not. A tracker with no judgment yet counts as the coolest level."""
-    before = previous.level if previous else LEVELS[0]
-    if before == new.level:
-        return None
-    return f"{tracker.title}: {before} → {new.level}. {new.reason}"
+alert_for = level_change_alert
 
 
 def collect_prompt(tracker, recent_observations) -> str:

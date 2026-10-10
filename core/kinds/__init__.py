@@ -7,7 +7,7 @@ collect and judge for it; the rule that turns a new assessment into an alert
 code change; adding a tracker of an existing kind is rows."""
 from importlib import import_module
 
-NAMES = ("topic",)
+NAMES = ("topic", "country_risk")
 
 # Cadence words the agent may use, as crontab in settings.TIME_ZONE.
 CADENCES = {
@@ -44,6 +44,20 @@ def validate(values: dict, schema: dict[str, tuple[type, bool]], label: str) -> 
         value = values[field]
         if value is None and not required:
             continue
-        if isinstance(value, bool) or not isinstance(value, (expected_type, int) if expected_type is float else expected_type):
+        if expected_type in (int, float):
+            # bool is an int to Python; a severity of True is not a severity.
+            fits = isinstance(value, (int, float) if expected_type is float else int) and not isinstance(value, bool)
+        else:
+            fits = isinstance(value, expected_type)
+        if not fits:
             raise ValueError(f"{label}.{field} must be {expected_type.__name__}, got {type(value).__name__}")
     return values
+
+
+def level_change_alert(tracker, previous, new) -> str | None:
+    """The alert rule every kind shares: a level change is told to Guy, the same
+    level again is not. A tracker with no judgment yet counts as the coolest level."""
+    before = previous.level if previous else get(tracker.kind).LEVELS[0]
+    if before == new.level:
+        return None
+    return f"{tracker.title}: {before} → {new.level}. {new.reason}"
