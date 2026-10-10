@@ -6,7 +6,7 @@ import type { ViewProps } from "./index";
 const REFRESH_MS = 60_000;
 
 /** The generic view: latest judgment on top, then the observations with their sources. */
-export function Feed({ slug, onBack }: ViewProps) {
+export function Feed({ slug, onClose }: ViewProps) {
   const [detail, setDetail] = useState<TrackerDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,9 +31,9 @@ export function Feed({ slug, onBack }: ViewProps) {
   return (
     <article className="feed">
       <div className="feed-head">
-        <button className="back" onClick={onBack}>← all</button>
         <h1>{detail.title}</h1>
         <span className={`level lvl-${detail.level_rank}`}>{detail.level ?? "unjudged"}</span>
+        <button className="close" onClick={onClose} aria-label="close">×</button>
       </div>
       <p className="brief">{detail.brief}</p>
 
