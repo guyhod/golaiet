@@ -27,6 +27,9 @@ style in `/Users/guyhod/Kruv/CLAUDE.md` apply here in full.
   module under `core/kinds/` plus a view.
 - **The tool server never talks to Telegram.** Alerts a session raises are
   rows; the flow delivers them after the CLI has exited (`chat/alerts.py`).
+- **Heat and conflict kind definitions live once**, in
+  `core/kinds/country_risk.py`; the research prompt renders them and the
+  globe's legend copies them. Change both together.
 - **One scheduler registrar.** APScheduler jobs are added only in
   `manage.py run_scheduler`, never in `AppConfig.ready()`.
 
@@ -50,13 +53,14 @@ make test
 
 ```
 config/      settings, urls, wsgi
-core/        Tracker, Observation, Assessment, Alert, Focus, kinds/ (one module per tracker kind)
+core/        Tracker, Observation, Assessment, Alert, Focus, kinds/ (one module per tracker kind: topic, country_risk)
 scheduler/   Job, JobRun, jobs.py (rows→APScheduler), dispatcher.py, run_scheduler, seed_jobs
 chat/        Conversation, Message, telegram.py (send + getUpdates), poller.py, alerts.py (delivery)
 agent/       runner.py (CLI subprocess), tools.py (the functions), prompts.py,
-             management/commands/mcp_tools.py (the tool server), flows/{reply,collect,assess}.py
+             management/commands/mcp_tools.py (the tool server), flows/{reply,collect,assess,research}.py
 api/         django-ninja read-only API (health, trackers, alerts, focus + its SSE stream)
-dashboard/   Vite + React app with its own Dockerfile (node build → nginx) and nginx.conf
+dashboard/   Vite + React app with its own Dockerfile (node build → nginx) and nginx.conf;
+             src/views/ is the view registry (feed, globe), src/views/globe/ the MapLibre globe
 tests/       pytest-django
 docs/        the planning documents
 ```

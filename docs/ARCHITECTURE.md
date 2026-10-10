@@ -33,7 +33,7 @@ dashboard decides nothing: it draws what the database says.
 | `scheduler/` | `Job` rows define the schedule; a single process re-syncs APScheduler from the table every 30 s; `JobRun` is the run log, cost ledger and heartbeat | investment_engine `scheduler/` (models, jobs, dispatcher, market_hours) |
 | `agent/` | Builds the prompt, runs the Claude CLI headless with the MCP config, parses JSON, retries unparseable replies, aborts the whole loop on billing markers, tallies cost | investment_engine `scheduler/runner.py` + `agent_flow.py`; conflict map `research/runner.py` |
 | `agent/tools` (MCP server) | The agent's only way to touch Golaiet: typed tools over the Django ORM (§5) | new |
-| `kinds/` | One module per tracker kind: payload schema, default brief template, default jobs, assessment rules, view name | conflict map `research/country.py`, investment_engine `core/monitor.py` |
+| `kinds/` | One module per tracker kind: subject, payload and state schemas, ordered levels, prompts, the alert rule, default jobs, view name. `topic` (collect + judge as two jobs) and `country_risk` (one research session that files sources and the record) | conflict map `research/country.py`, investment_engine `core/monitor.py` |
 | `api/` | django-ninja: trackers, observations, assessments, focus (GET + SSE), health | both repos' `api/api.py` |
 | `dashboard/` | Vite + React in its own container: nginx serves the build and proxies `/api`, `/admin` and `/static` to Django. Shell (header, alert banner, main view) + a view registry keyed by tracker kind | `Life/Golaiet/Claude/dashboard-react`, conflict map `frontend/src/map` |
 
@@ -318,7 +318,7 @@ that, and the scheduler bounds parallelism anyway.
 
 - One Vite + React app (`dashboard/`, no other dependencies), built in its own image (`dashboard/Dockerfile`, node stage then nginx) and served at `/` on port 8003; nginx proxies `/api`, `/admin` and `/static` to the Django container, with buffering off on the event stream. No `file://`, no Obsidian Sync hop, so the kiosk opens a URL. On the host, `make dashboard-dev` runs Vite on 5174 against `make run` on 8003.
 - Shell: header (heartbeat time, stale banner when the health endpoint says so, the latest alert of the last 24 h), main view. The drawer arrives with the globe.
-- **View registry:** `{ feed, globe, price, campaign_map }`. A tracker kind names its view. `feed` is generic: assessment tile, observation list, provenance to sources. Every tracker gets `feed` for free on day one.
+- **View registry:** `{ feed, globe, price, campaign_map }`. A tracker kind names its view and whether it wants the wide module. `feed` is generic: assessment tile, observation list, provenance to sources. `globe` (country_risk) paints every country tracker by level and shows the opened country's record beside it; clicking another painted country switches the record locally.
 - Overview (no focus): tiles of all active trackers by latest level, hottest first (`level_rank` from the API, so the app knows no kind's levels). Click a tile: local drill-down into its view.
 - Focus event (`/api/focus/stream`, one event per change, reconnects by itself): switch to the tracker's view with the pushed parameters, or back to the overview. Data refreshes once a minute; focus is immediate.
 - Geometry ships with the app; no network at render time (conflict map rule, keeps a static export possible).

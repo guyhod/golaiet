@@ -71,6 +71,17 @@ Exit test:
 Not in Phase 2: structured feeds (ACLED, GDELT), counterpart arcs, filters
 by kind or scope, researching all 249 countries.
 
+Built 2026-10-10. Seven country trackers (ISR, PSE, LBN, SYR, JOR, EGY, IRN)
+researched once each, 33 to 108 s and 15 to 24 cents a run; every first
+judgment alerted once, Israel's second run (score 25, unchanged) alerted
+nothing. Exit test 1 passed through the agent: the reply quotes level, score,
+reason and the change since the previous judgment, and the screen opens the
+globe on Israel. Test 2 is the weekly schedule, unit-tested through the level
+rule. Test 3 waits for Guy to create the antisemitism tracker in Telegram.
+Left out, as agreed: place markers on the globe (conflicts carry their place
+in the record), the conflict map's old records (not imported), and the ask
+box (Telegram is the ask box).
+
 ## Phase 3: stocks
 
 Build: `kinds/stock` with a deterministic collect script (Yahoo batch

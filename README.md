@@ -3,12 +3,13 @@
 One agent that tracks the things Guy cares about, tells him when something
 changes, and shows him where things stand.
 
-**Status: Phase 1 built (2026-10-10).** Say "track X weekly" in Telegram and
-a tracker, its collect and assess jobs and its first observations follow; the
-weekly judge records a level with its reason and a level change reaches
-Telegram; the dashboard at `/` shows every tracker as a tile and "show me X"
-in chat moves it. Next: the globe, Phase 2 in [docs/ROADMAP.md](docs/ROADMAP.md).
-How to run: [CLAUDE.md](CLAUDE.md).
+**Status: Phase 2 built (2026-10-10).** Say "track X weekly" in Telegram and
+a tracker, its jobs and its first observations follow; a weekly judge records
+a level with its reason and a level change reaches Telegram; the dashboard at
+`/` shows every tracker as a tile and "show me X" in chat opens it. Country
+trackers (`country_risk`, ported from the conflict map) carry a sourced
+record with a peace score and open on a globe. Next: stocks, Phase 3 in
+[docs/ROADMAP.md](docs/ROADMAP.md). How to run: [CLAUDE.md](CLAUDE.md).
 
 ## Why one project
 
