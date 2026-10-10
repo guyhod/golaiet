@@ -1,4 +1,4 @@
-"""The nine (six in this phase) functions the agent may call. Registered as MCP
+"""The nine functions the agent may call. Registered as MCP
 tools by `manage.py mcp_tools`; name, docstring and type hints become the tool
 name, description and schema the model sees. Each call is one short unit of
 ORM work; provenance (which run, which message) comes from the environment the
@@ -15,7 +15,7 @@ from django.core.validators import URLValidator
 from django.utils import timezone
 
 from core import kinds
-from core.models import Observation, Tracker
+from core.models import Alert, Assessment, Focus, Observation, Tracker
 from scheduler.models import Job
 
 
@@ -31,12 +31,32 @@ def _message_id() -> int | None:
 
 def _tracker_dict(tracker: Tracker) -> dict:
     latest = tracker.observations.order_by("-observed_at").first()
+    judged = tracker.assessments.order_by("-at").first()
     return {
         "slug": tracker.slug, "title": tracker.title, "kind": tracker.kind, "status": tracker.status,
         "subject": tracker.subject, "cadence": _cadence_of(tracker),
         "observations": tracker.observations.count(),
         "latest_observation_at": latest.observed_at.isoformat() if latest else None,
+        "latest_assessment": _assessment_dict(judged) if judged else None,
     }
+
+
+def _assessment_dict(assessment: Assessment) -> dict:
+    return {
+        "id": assessment.pk, "tracker": assessment.tracker.slug, "at": assessment.at.isoformat(),
+        "state": assessment.state, "reason": assessment.reason,
+        "evidence_ids": list(assessment.evidence.values_list("pk", flat=True)),
+    }
+
+
+def _alert_dict(alert: Alert) -> dict:
+    return {"id": alert.pk, "tracker": alert.tracker.slug, "level": alert.level, "text": alert.text,
+            "created_at": alert.created_at.isoformat()}
+
+
+def _focus_dict(focus: Focus) -> dict:
+    return {"tracker": focus.tracker.slug if focus.tracker else None, "view": focus.view,
+            "view_params": focus.view_params, "note": focus.note, "set_at": focus.set_at.isoformat()}
 
 
 def _observation_dict(observation: Observation) -> dict:
@@ -80,10 +100,12 @@ def list_trackers() -> list[dict]:
 
 
 def get_tracker(slug: str, observations: int = 20) -> dict:
-    """One tracker in full: its brief and its most recent observations (newest first)."""
+    """One tracker in full: its brief, its last few assessments and its most recent observations (newest first)."""
     tracker = Tracker.objects.get(slug=slug)
     recent = tracker.observations.select_related("tracker").order_by("-observed_at")[:max(0, observations)]
+    judged = tracker.assessments.select_related("tracker").order_by("-at")[:5]
     return dict(_tracker_dict(tracker), brief=tracker.brief,
+                recent_assessments=[_assessment_dict(assessment) for assessment in judged],
                 recent_observations=[_observation_dict(observation) for observation in recent])
 
 
@@ -104,8 +126,8 @@ def create_tracker(slug: str, title: str, kind: str, subject: dict, brief: str, 
                                      view=kind_module.VIEW, created_by_message_id=_message_id())
     jobs = []
     for spec in kind_module.DEFAULT_JOBS:
-        job = Job.objects.create(name=f"{spec['kind']}:{slug}", kind=spec["kind"], tracker=tracker,
-                                 trigger=Job.Trigger.CRON, schedule=kinds.CADENCES[cadence], target=spec["target"])
+        job = Job.objects.create(name=f"{spec['kind']}:{slug}", kind=spec["kind"], tracker=tracker, trigger=Job.Trigger.CRON,
+                                 schedule=spec.get("schedule") or kinds.CADENCES[cadence], target=spec["target"])
         jobs.append({"name": job.name, "schedule": job.schedule, "first_run_at": _next_fire(job.schedule)})
     return dict(_tracker_dict(tracker), jobs=jobs)
 
@@ -168,4 +190,63 @@ def search_observations(query: str, slug: str | None = None, since: str | None =
     return [_observation_dict(observation) for observation in found.order_by("-observed_at")[:max(1, min(limit, 100))]]
 
 
-ALL = (list_trackers, get_tracker, create_tracker, update_tracker, record_observation, search_observations)
+def record_assessment(slug: str, state: dict, reason: str, evidence_ids: list[int] | None = None) -> dict:
+    """Record your judgment of a tracker; judgments are kept, never edited. state: the kind's fields
+    (topic: {"level": quiet|watch|elevated|critical, "score": 0-100 optional). reason: two to four sentences
+    citing dates and figures. evidence_ids: ids of this tracker's observations you relied on.
+    A change of level raises an alert to Guy by the kind's rule; you need not raise one yourself."""
+    tracker = Tracker.objects.get(slug=slug)
+    kind_module = kinds.get(tracker.kind)
+    kind_module.validate_state(state)
+    if not reason.strip():
+        raise ValueError("reason must not be empty")
+    wanted = set(evidence_ids or [])
+    evidence = list(tracker.observations.filter(pk__in=wanted))
+    missing = wanted - {observation.pk for observation in evidence}
+    if missing:
+        raise ValueError(f"evidence_ids are not observations of {slug}: {', '.join(map(str, sorted(missing)))}")
+    previous = tracker.assessments.order_by("-at").first()
+    assessment = Assessment.objects.create(tracker=tracker, state=state, reason=reason.strip(), job_run_id=_run_id())
+    assessment.evidence.set(evidence)
+    alert = None
+    alert_text = kind_module.alert_for(tracker, previous, assessment)
+    if alert_text:
+        alert = Alert.objects.create(tracker=tracker, assessment=assessment, level=assessment.level, text=alert_text,
+                                     job_run_id=_run_id())
+    return dict(_assessment_dict(assessment), alert=_alert_dict(alert) if alert else None)
+
+
+def raise_alert(slug: str, level: str, text: str) -> dict:
+    """Tell Guy something about a tracker now, outside the level rule: one or two sentences with the date
+    and source. level: one of the kind's levels. Not raised again while the tracker's latest alert is at the
+    same level; the existing one is returned instead."""
+    tracker = Tracker.objects.get(slug=slug)
+    kind_module = kinds.get(tracker.kind)
+    if level not in kind_module.LEVELS:
+        raise ValueError(f"level must be one of {', '.join(kind_module.LEVELS)}")
+    if not text.strip():
+        raise ValueError("text must not be empty")
+    latest = tracker.alerts.order_by("-created_at").first()
+    if latest is not None and latest.level == level:
+        return dict(_alert_dict(latest), duplicate=True)
+    alert = Alert.objects.create(tracker=tracker, level=level, text=text.strip(), job_run_id=_run_id())
+    return dict(_alert_dict(alert), duplicate=False)
+
+
+def set_focus(slug: str | None = None, view_params: dict | None = None, note: str = "") -> dict:
+    """Move the dashboard. slug: show this tracker in its own view; omit it to return to the overview of
+    every tracker. view_params: parameters of that view, if it takes any. note: one short line shown on
+    screen with it, e.g. what Guy asked."""
+    focus = Focus.current()
+    tracker = Tracker.objects.get(slug=slug) if slug else None
+    focus.tracker = tracker
+    focus.view = tracker.view if tracker else Focus.OVERVIEW
+    focus.view_params = view_params or {}
+    focus.note = note.strip()
+    focus.set_by_message_id = _message_id()
+    focus.save()
+    return _focus_dict(focus)
+
+
+ALL = (list_trackers, get_tracker, create_tracker, update_tracker, record_observation, search_observations,
+       record_assessment, raise_alert, set_focus)

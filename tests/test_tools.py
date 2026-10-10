@@ -63,3 +63,47 @@ def test_search_and_get(tracker):
     assert detail["observations"] == 2 and len(detail["recent_observations"]) == 1
     assert detail["recent_observations"][0]["source_url"] == "https://n.example/2"
     assert tools.list_trackers()[0]["slug"] == tracker.slug
+
+
+@pytest.mark.django_db
+def test_record_assessment_links_evidence_and_alerts_on_level_change(tracker, monkeypatch):
+    from core.models import Alert, Assessment
+    monkeypatch.setenv("GOLAIET_JOB_RUN_ID", "")
+    observation = tools.record_observation(tracker.slug, "2026-10-08", "https://n.example/1", "HBM supply tight", None)
+    first = tools.record_assessment(tracker.slug, {"level": "watch", "score": 40}, "Supply tightened on 2026-10-08.", [observation["id"]])
+    assert first["evidence_ids"] == [observation["id"]]
+    assert first["alert"]["level"] == "watch" and first["alert"]["text"].startswith("VRAM supply and pricing: quiet → watch.")
+    same = tools.record_assessment(tracker.slug, {"level": "watch"}, "No change.", [])
+    assert same["alert"] is None
+    assert Assessment.objects.count() == 2 and Alert.objects.count() == 1
+    with pytest.raises(ValueError, match="level must be one of"):
+        tools.record_assessment(tracker.slug, {"level": "panic"}, "x", [])
+    with pytest.raises(ValueError, match="not observations of vram-supply: 999"):
+        tools.record_assessment(tracker.slug, {"level": "watch"}, "x", [999])
+    assert tools.list_trackers()[0]["latest_assessment"]["state"] == {"level": "watch"}
+
+
+@pytest.mark.django_db
+def test_raise_alert_dedupes_at_same_level(tracker, monkeypatch):
+    from core.models import Alert
+    monkeypatch.setenv("GOLAIET_JOB_RUN_ID", "")
+    first = tools.raise_alert(tracker.slug, "elevated", "Micron halted GDDR7 shipments on 2026-10-09.")
+    again = tools.raise_alert(tracker.slug, "elevated", "same thing again")
+    assert first["duplicate"] is False and again["duplicate"] is True and again["id"] == first["id"]
+    assert tools.raise_alert(tracker.slug, "critical", "now worse")["duplicate"] is False
+    assert Alert.objects.count() == 2
+    with pytest.raises(ValueError, match="level must be one of"):
+        tools.raise_alert(tracker.slug, "red", "x")
+
+
+@pytest.mark.django_db
+def test_set_focus_is_one_row(tracker, monkeypatch):
+    from core.models import Focus
+    monkeypatch.setenv("GOLAIET_MESSAGE_ID", "")
+    shown = tools.set_focus(tracker.slug, note="Guy asked for VRAM")
+    assert shown["tracker"] == tracker.slug and shown["view"] == "feed" and shown["note"] == "Guy asked for VRAM"
+    cleared = tools.set_focus()
+    assert cleared["tracker"] is None and cleared["view"] == "overview"
+    assert Focus.objects.count() == 1
+    with pytest.raises(Tracker.DoesNotExist):
+        tools.set_focus("nope")

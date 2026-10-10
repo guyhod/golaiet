@@ -36,3 +36,14 @@ def test_collect_prompt_lists_recent_and_caps(tracker):
     assert "https://a.example/1" in prompt and "HBM3E prices up 10%" in prompt
     assert f"at most {topic.MAX_NEW_OBSERVATIONS_PER_RUN}" in prompt
     assert tracker.brief in prompt
+
+
+def test_topic_alert_rule_fires_on_level_change_only():
+    from types import SimpleNamespace
+    from core.kinds import topic
+    tracker = SimpleNamespace(title="VRAM")
+    watch = SimpleNamespace(level="watch", reason="Prices up.")
+    assert topic.alert_for(tracker, None, SimpleNamespace(level="quiet", reason="Calm.")) is None
+    assert topic.alert_for(tracker, None, watch) == "VRAM: quiet → watch. Prices up."
+    assert topic.alert_for(tracker, watch, SimpleNamespace(level="watch", reason="Still.")) is None
+    assert topic.alert_for(tracker, watch, SimpleNamespace(level="quiet", reason="Eased.")) == "VRAM: watch → quiet. Eased."

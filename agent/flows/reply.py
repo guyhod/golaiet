@@ -2,7 +2,7 @@
 through the `reply` job, so every exchange has a JobRun with its cost."""
 import logging
 
-from chat import telegram
+from chat import alerts, telegram
 from chat.models import Message
 from agent.prompts import REPLY_SYSTEM_PROMPT
 from agent.runner import ClaudeRunner
@@ -38,6 +38,7 @@ def run(job, run, *, message_id: int) -> dict:
                                       text=reply_text, job_run=run)
     outgoing.telegram_message_id = telegram.send(reply_text, chat_id=conversation.chat_id)
     outgoing.save(update_fields=["telegram_message_id"])
+    alerts.deliver(run)
     return {
         "summary": ("billing: " if result.is_billing_abort else "error: " if failed else "") + result.text[:500],
         "cost_usd": result.cost_usd, "session_id": result.session_id, "failed": failed,

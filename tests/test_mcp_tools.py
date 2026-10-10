@@ -44,7 +44,9 @@ def call_through_server(method: str, params: dict, timeout: float = 20) -> dict:
 
 def test_tools_list_keeps_names_docs_and_schemas():
     listed = {tool["name"]: tool for tool in call_through_server("tools/list", {})["tools"]}
-    assert set(listed) == {"list_trackers", "get_tracker", "create_tracker", "update_tracker", "record_observation", "search_observations"}
+    assert set(listed) == {"list_trackers", "get_tracker", "create_tracker", "update_tracker", "record_observation",
+                           "search_observations", "record_assessment", "raise_alert", "set_focus"}
+    assert "required" not in listed["set_focus"]["inputSchema"]
     assert listed["record_observation"]["inputSchema"]["required"] == ["slug", "observed_at", "source_url", "summary"]
     assert "ISO date" in listed["record_observation"]["description"]
 
