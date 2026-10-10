@@ -34,13 +34,16 @@ style in `/Users/guyhod/Kruv/CLAUDE.md` apply here in full.
 
 ```bash
 cp .env.template .env            # fill in: DB_PASSWORD, TELEGRAM_*, CLAUDE_CODE_OAUTH_TOKEN
+make stack                       # the whole thing: db, migrate, web, scheduler, dashboard on 8003
+make logs
+
+# Host dev instead (stop the compose scheduler first: two pollers on one bot conflict)
 make up && make migrate          # Postgres on 5435, then the schema
 ./.venv/bin/python manage.py seed_jobs
-make scheduler                   # job loop + Telegram poller (host dev)
-make dashboard                   # build the React app (once, and after dashboard/ changes)
-make run                         # dashboard, admin and API on 8003
+make scheduler                   # job loop + Telegram poller
+make run                         # Django admin + API on 8003
+make dashboard-dev               # Vite on 5174, /api proxied to 8003
 make test
-make stack                       # everything under docker compose instead
 ```
 
 ## Layout
@@ -53,7 +56,7 @@ chat/        Conversation, Message, telegram.py (send + getUpdates), poller.py, 
 agent/       runner.py (CLI subprocess), tools.py (the functions), prompts.py,
              management/commands/mcp_tools.py (the tool server), flows/{reply,collect,assess}.py
 api/         django-ninja read-only API (health, trackers, alerts, focus + its SSE stream)
-dashboard/   Vite + React app; dist/ is served by Django at /
+dashboard/   Vite + React app with its own Dockerfile (node build → nginx) and nginx.conf
 tests/       pytest-django
 docs/        the planning documents
 ```

@@ -1,6 +1,8 @@
-# The whole stack on the Mac: db + migrate + scheduler + web. restart: always
-# brings everything back with Docker Desktop after a reboot.
-# Host ports: 5435 Postgres (5432 organism, 5433 investment engine, 5434 conflict map), 8003 web.
+# The whole stack on the Mac: db + migrate + scheduler + web (Django) +
+# dashboard (nginx serving the React build, proxying /api, /admin and /static
+# to web). restart: always brings everything back with Docker Desktop after a
+# reboot. Host ports: 5435 Postgres (5432 organism, 5433 investment engine,
+# 5434 conflict map), 8003 dashboard; Django is reached only through it.
 x-app: &app
   build: .
   env_file: .env
@@ -60,8 +62,15 @@ services:
     # Threaded workers: the dashboard holds /api/focus/stream open, and a sync
     # worker would be parked on it for as long as the screen is on.
     command: gunicorn config.wsgi -b 0.0.0.0:8003 --workers 2 --worker-class gthread --threads 8
+
+  dashboard:
+    build: ./dashboard
+    container_name: golaiet-dashboard
+    restart: always
     ports:
-      - "127.0.0.1:8003:8003"
+      - "127.0.0.1:8003:80"
+    depends_on:
+      - web
 
 volumes:
   pgdata:

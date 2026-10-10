@@ -35,7 +35,7 @@ dashboard decides nothing: it draws what the database says.
 | `agent/tools` (MCP server) | The agent's only way to touch Golaiet: typed tools over the Django ORM (§5) | new |
 | `kinds/` | One module per tracker kind: payload schema, default brief template, default jobs, assessment rules, view name | conflict map `research/country.py`, investment_engine `core/monitor.py` |
 | `api/` | django-ninja: trackers, observations, assessments, focus (GET + SSE), health | both repos' `api/api.py` |
-| `dashboard/` | Vite + React. Shell (header, alert banner, main view, drawer) + a view registry keyed by tracker kind | `Life/Golaiet/Claude/dashboard-react`, conflict map `frontend/src/map` |
+| `dashboard/` | Vite + React in its own container: nginx serves the build and proxies `/api`, `/admin` and `/static` to Django. Shell (header, alert banner, main view) + a view registry keyed by tracker kind | `Life/Golaiet/Claude/dashboard-react`, conflict map `frontend/src/map` |
 
 ## 3. Data model
 
@@ -177,11 +177,12 @@ goes through the Django ORM, in whichever process it happens.
 | Process | Lifetime | What it is |
 |---|---|---|
 | PostgreSQL | always | `docker compose`, port 5435 |
-| `web` | always | Django under gunicorn (threaded workers, so an open focus stream does not park one): `/api/*`, SSE focus stream, serves the dashboard |
+| `web` | always | Django under gunicorn (threaded workers, so an open focus stream does not park one): `/api/*`, SSE focus stream, admin. Reached only through `dashboard` |
+| `dashboard` | always | nginx: the React build at `/`, everything else proxied to `web`. Owns host port 8003 |
 | `scheduler` | always | `manage.py run_scheduler`: APScheduler loop, the Telegram long-poll thread, the agent runner |
 | `claude` | per run | Anthropic's CLI, started by the scheduler, logged in with Guy's plan |
 | `mcp_tools` | per run | `manage.py mcp_tools`: a Django process started **by the CLI**, speaks MCP over stdin/stdout |
-| `dashboard` | browser | React app; talks only to `web` |
+| browser | kiosk | the React app; talks only to its own origin |
 
 The MCP server is not a wrapper around Django. It **is** a Django process,
 the same code and settings as `web` and `scheduler`, whose only job is to
@@ -315,7 +316,7 @@ that, and the scheduler bounds parallelism anyway.
 
 ## 7. Dashboard
 
-- One Vite + React app (`dashboard/`, no other dependencies), built to static files, served by Django at `/`: `dist/index.html` as a template, the hashed assets under `/static/`. No `file://`, no Obsidian Sync hop, so the kiosk opens a URL. `make dashboard` builds it on the host; the image builds it before `collectstatic`.
+- One Vite + React app (`dashboard/`, no other dependencies), built in its own image (`dashboard/Dockerfile`, node stage then nginx) and served at `/` on port 8003; nginx proxies `/api`, `/admin` and `/static` to the Django container, with buffering off on the event stream. No `file://`, no Obsidian Sync hop, so the kiosk opens a URL. On the host, `make dashboard-dev` runs Vite on 5174 against `make run` on 8003.
 - Shell: header (heartbeat time, stale banner when the health endpoint says so, the latest alert of the last 24 h), main view. The drawer arrives with the globe.
 - **View registry:** `{ feed, globe, price, campaign_map }`. A tracker kind names its view. `feed` is generic: assessment tile, observation list, provenance to sources. Every tracker gets `feed` for free on day one.
 - Overview (no focus): tiles of all active trackers by latest level, hottest first (`level_rank` from the API, so the app knows no kind's levels). Click a tile: local drill-down into its view.
@@ -325,11 +326,12 @@ that, and the scheduler bounds parallelism anyway.
 ## 8. Deployment
 
 Mac first, as the other two. Ports chosen not to collide: PostgreSQL 5435,
-Django 8003, Vite dev 5174 (Organism uses 5432; investment_engine 5433,
-8000, 8001; conflict map 5434, 8002, 5173). `docker compose` for the
-database; Django and the scheduler on the host under launchd, because the
-Claude CLI must run where the plan login lives. Moving to a NUC or VM
-follows investment_engine's `docs/ops/HOST_SPEC.md`.
+dashboard 8003 (Django behind it), Vite dev 5174 (Organism uses 5432;
+investment_engine 5433, 8000, 8001; conflict map 5434, 8002, 5173). Everything
+runs under `docker compose` (`make stack`): `db`, `migrate`, `web`,
+`scheduler` (the Claude CLI inside, on the plan OAuth token, session store on
+the `claude_state` volume) and `dashboard`. Running since 2026-10-10. Moving
+to a NUC or VM follows investment_engine's `docs/ops/HOST_SPEC.md`.
 
 Telegram long polling needs no public URL, no ngrok and no webhook secret.
 Alerts are enabled by the presence of the bot token and chat id, never by a

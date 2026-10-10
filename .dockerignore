@@ -6,7 +6,6 @@
 __pycache__
 agent/runs
 staticfiles
-dashboard/node_modules
-dashboard/dist
+dashboard
 docs
 tests
