@@ -117,9 +117,11 @@ def get_tracker(slug: str, observations: int = 20) -> dict:
 
 def create_tracker(slug: str, title: str, kind: str, subject: dict, brief: str, cadence: str) -> dict:
     """Start tracking something new. slug: short, lowercase, hyphens (e.g. vram-supply, isr).
-    kind: topic (a web-researched subject) or country_risk (one country's war risk and peace score).
-    subject: the kind's fields (topic: {"query": ..., "regions": [...]}; country_risk: {"iso3": "ISR"}).
-    brief: standing instructions for collecting, in full sentences. cadence: hourly, daily or weekly.
+    kind: topic (a web-researched subject), country_risk (one country's war risk and peace score) or
+    stock (a listed company against a buy price). subject: the kind's fields (topic: {"query": ..., "regions": [...]};
+    country_risk: {"iso3": "ISR"}; stock: {"ticker": "CEG", "good_below": 170}).
+    brief: standing instructions for collecting (for a stock: the thesis), in full sentences.
+    cadence: hourly, daily or weekly (stock news: daily; prices tick on their own every 15 minutes).
     Creates the tracker and its collect job; returns when the first run is."""
     if Tracker.objects.filter(slug=slug).exists():
         raise ValueError(f"tracker {slug!r} already exists; use update_tracker")
@@ -139,11 +141,16 @@ def create_tracker(slug: str, title: str, kind: str, subject: dict, brief: str, 
     return dict(_tracker_dict(tracker), jobs=jobs)
 
 
-def update_tracker(slug: str, brief: str | None = None, cadence: str | None = None, status: str | None = None) -> dict:
+def update_tracker(slug: str, brief: str | None = None, cadence: str | None = None, status: str | None = None,
+                   subject: dict | None = None) -> dict:
     """Change an existing tracker: a new brief (replaces the old one in full), a new cadence
-    (hourly, daily, weekly), or its status (active, paused, archived). Omitted fields are untouched."""
+    (hourly, daily, weekly), its status (active, paused, archived), or a new subject (the kind's
+    fields in full, e.g. a stock's new good_below). Omitted fields are untouched."""
     tracker = Tracker.objects.get(slug=slug)
     changed = []
+    if subject is not None:
+        tracker.subject = kinds.get(tracker.kind).validate_subject(subject)
+        changed.append("subject")
     if brief is not None:
         if not brief.strip():
             raise ValueError("brief must not be empty")
@@ -214,14 +221,25 @@ def record_assessment(slug: str, state: dict, reason: str, evidence_ids: list[in
     missing = wanted - {observation.pk for observation in evidence}
     if missing:
         raise ValueError(f"evidence_ids are not observations of {slug}: {', '.join(map(str, sorted(missing)))}")
-    assessment = Assessment.objects.create(tracker=tracker, state=state, reason=reason.strip(), job_run_id=_run_id())
+    assessment, alert = judge(tracker, state, reason, evidence, job_run_id=_run_id())
+    return dict(_assessment_dict(assessment), alert=_alert_dict(alert) if alert else None)
+
+
+def judge(tracker: Tracker, state: dict, reason: str, evidence: list[Observation], *,
+          job_run_id: int | None) -> tuple[Assessment, Alert | None]:
+    """The judgment itself, for the tool above and for scripts that judge
+    without a session (scheduler.scripts.prices): the assessment row, and the
+    alert row when the kind's rule says the change is news. The caller has
+    validated state against the kind."""
+    previous = tracker.assessments.order_by("-at").first()
+    assessment = Assessment.objects.create(tracker=tracker, state=state, reason=reason.strip(), job_run_id=job_run_id)
     assessment.evidence.set(evidence)
+    alert_text = kinds.get(tracker.kind).alert_for(tracker, previous, assessment)
     alert = None
-    alert_text = kind_module.alert_for(tracker, previous, assessment)
     if alert_text:
         alert = Alert.objects.create(tracker=tracker, assessment=assessment, level=assessment.level, text=alert_text,
-                                     job_run_id=_run_id())
-    return dict(_assessment_dict(assessment), alert=_alert_dict(alert) if alert else None)
+                                     job_run_id=job_run_id)
+    return assessment, alert
 
 
 def raise_alert(slug: str, level: str, text: str) -> dict:

@@ -6,7 +6,7 @@ from core.kinds import topic
 
 def test_unknown_kind_is_an_error():
     with pytest.raises(ValueError, match="unknown tracker kind"):
-        kinds.get("stock")
+        kinds.get("bond")
 
 
 def test_topic_subject_requires_query():

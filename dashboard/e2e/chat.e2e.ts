@@ -51,3 +51,15 @@ test("a level change reaches Telegram once and lands in the banner", async ({ pa
   const alerts = (await outbound()).filter((sent) => sent.text.startsWith("🔔"));
   expect(alerts).toHaveLength(1);
 });
+
+test("track a stock with a line opens the price view", async ({ page }) => {
+  expect(await say("Track CEG, good below 170")).toBe("Tracking CEG, good below 170.");
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: /CEG/ })).toBeVisible();
+  expect(await say("Show me CEG")).toBe("CEG is on screen.");
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("heading", { name: "CEG" })).toBeVisible();
+  await expect(dialog).toContainText("good below 170.00");
+  await expect(dialog).toContainText("No ticks yet");
+  await expect(dialog.locator(".chart canvas")).toBeVisible();
+});

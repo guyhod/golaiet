@@ -109,3 +109,12 @@ main { flex: 1; padding: 1.2rem 1.4rem; }
 .lvl-2 { --level-colour: var(--lvl-2); --heat-colour: var(--heat-2); }
 .lvl-3 { --level-colour: var(--lvl-3); --heat-colour: var(--heat-3); }
 .lvl-4 { --level-colour: var(--lvl-3); --heat-colour: var(--heat-4); }
+
+/* Price view: the chart fills the left, thesis and news on the right. */
+.price { display: grid; grid-template-columns: 1fr 30rem; height: 100%; }
+.chart-pane { display: flex; flex-direction: column; padding: 1.2rem 1.4rem; min-width: 0; }
+.chart-pane .ticker { font-size: 1.2rem; letter-spacing: 0.08em; }
+.price-figures { display: flex; align-items: baseline; gap: 1rem; margin: 0.4rem 0 0.8rem; }
+.price-figures .figure { font-size: 2.6rem; font-weight: 600; color: var(--level-colour); }
+.chart { flex: 1; min-height: 16rem; }
+.record .close { float: right; }

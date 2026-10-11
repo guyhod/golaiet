@@ -76,13 +76,26 @@ def trackers(request):
 
 
 @api.get("/trackers/{slug}")
-def tracker_detail(request, slug: str, limit: int = 50):
+def tracker_detail(request, slug: str, limit: int = 50, sourced: bool = False):
+    """sourced=true keeps only observations with a URL: a stock's news without
+    its ticks, which the price view takes from /prices instead."""
     tracker = Tracker.objects.get(slug=slug)
-    recent = tracker.observations.order_by("-observed_at")[:max(1, min(limit, 500))]
+    recent = tracker.observations.order_by("-observed_at")
+    if sourced:
+        recent = recent.exclude(source_url="")
+    recent = recent[:max(1, min(limit, 500))]
     judged = tracker.assessments.order_by("-at")[:10]
     return dict(_tracker(tracker), brief=tracker.brief,
                 recent_assessments=[_assessment(assessment) for assessment in judged],
                 recent_observations=[_observation(observation) for observation in recent])
+
+
+@api.get("/trackers/{slug}/prices")
+def prices(request, slug: str, days: int = 30):
+    """The tracker's price ticks, oldest first, for the chart."""
+    since = timezone.now() - timedelta(days=max(1, min(days, 366)))
+    ticks = Tracker.objects.get(slug=slug).observations.filter(observed_at__gte=since, payload__has_key="price").order_by("observed_at")
+    return [{"at": tick.observed_at, "price": tick.payload["price"]} for tick in ticks]
 
 
 @api.get("/alerts")

@@ -98,6 +98,23 @@ Not in Phase 3: the committee, the sanity gate, discovery, thesis
 probability maths. The investment engine keeps running those until a tracker
 asks for a judgment the thresholds cannot give.
 
+**Built 2026-10-11.** `core/kinds/stock.py` (subject ticker + good_below,
+levels watch/opportunity, alert only on the move into opportunity, a daily
+news collect prompt) and `scheduler/scripts/prices.py` (one shared `prices`
+job seeded like the heartbeat: a Yahoo batch quote every 15 minutes while
+New York trades, one tick observation per quote, the threshold rule written
+through the same `judge` function the agent's tool uses). `update_tracker`
+accepts a new subject, so a line can be moved in chat. API: `/prices` per
+tracker and `?sourced=true` on the detail to separate news from ticks.
+Dashboard: the `price` view with Apache ECharts (the line against the
+good-below line, level, last price, thesis, news). Exit test 2 (one alert on
+the crossing, a quiet close) is proved by `tests/test_stock.py` with stubbed
+quotes; exit test 1's first live tick lands on the first trading day, Monday
+2026-10-12. Exit test 3 waits for the first news session. Deliberately left
+out: a stretched-above line, holidays in the market clock (an idle pass),
+and any e2e of the tick itself (it would need a third fake; the unit test
+covers the rule).
+
 ## Phase 4: life
 
 Build: `kinds/campaign` and `kinds/practice` with the `progress.md` schema

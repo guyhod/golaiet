@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { TrackerDetail } from "../api";
-import { getJson, formatDay, formatWhen, hostOf } from "../api";
+import { getJson, formatWhen } from "../api";
+import { Observations } from "./Observations";
 import type { ViewProps } from "./index";
 
 const REFRESH_MS = 60_000;
@@ -52,27 +53,7 @@ export function Feed({ slug, onClose }: ViewProps) {
         )}
       </section>
 
-      <ol className="observations">
-        {detail.recent_observations.map((observation) => (
-          <li key={observation.id} className={judged?.evidence_ids.includes(observation.id) ? "evidence" : ""}>
-            <div className="when">{formatDay(observation.observed_at)}</div>
-            <div>
-              <p>{observation.summary}</p>
-              <div className="muted small">
-                {observation.source_url && (
-                  <a href={observation.source_url} target="_blank" rel="noreferrer">{hostOf(observation.source_url)}</a>
-                )}
-                {Object.entries(observation.payload)
-                  .filter(([, value]) => value != null && value !== "")
-                  .map(([key, value]) => (
-                    <span key={key} className="chip">{key}: {String(value)}</span>
-                  ))}
-              </div>
-            </div>
-          </li>
-        ))}
-        {!detail.recent_observations.length && <li className="muted">Nothing observed yet.</li>}
-      </ol>
+      <Observations observations={detail.recent_observations} evidenceIds={judged?.evidence_ids} />
     </article>
   );
 }

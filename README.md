@@ -3,12 +3,15 @@
 One agent that tracks the things Guy cares about, tells him when something
 changes, and shows him where things stand.
 
-**Status: Phase 2 built (2026-10-10).** Say "track X weekly" in Telegram and
+**Status: Phase 3 built (2026-10-11).** Say "track X weekly" in Telegram and
 a tracker, its jobs and its first observations follow; a weekly judge records
 a level with its reason and a level change reaches Telegram; the dashboard at
 `/` shows every tracker as a tile and "show me X" in chat opens it. Country
 trackers (`country_risk`, ported from the conflict map) carry a sourced
-record with a peace score and open on a globe. Next: stocks, Phase 3 in
+record with a peace score and open on a globe. Stock trackers (`stock`,
+ported from the investment engine) tick every 15 minutes in market hours,
+alert once when the price reaches the line, and open on a price chart. Every
+push runs unit, smoke and end-to-end checks. Next: life, Phase 4 in
 [docs/ROADMAP.md](docs/ROADMAP.md). How to run: [CLAUDE.md](CLAUDE.md).
 
 ## Why one project

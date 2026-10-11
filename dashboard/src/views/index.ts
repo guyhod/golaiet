@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import { Feed } from "./Feed";
 import { Globe } from "./Globe";
+import { Price } from "./Price";
 
 export type ViewProps = { slug: string; params: Record<string, unknown>; onClose: () => void };
 export type View = { component: ComponentType<ViewProps>; wide: boolean };
@@ -9,6 +10,7 @@ export type View = { component: ComponentType<ViewProps>; wide: boolean };
 const VIEWS: Record<string, View> = {
   feed: { component: Feed, wide: false },
   globe: { component: Globe, wide: true },
+  price: { component: Price, wide: true },
 };
 
 export function viewFor(name: string): View {

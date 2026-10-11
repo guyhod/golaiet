@@ -7,7 +7,7 @@ collect and judge for it; the rule that turns a new assessment into an alert
 code change; adding a tracker of an existing kind is rows."""
 from importlib import import_module
 
-NAMES = ("topic", "country_risk")
+NAMES = ("topic", "country_risk", "stock")
 
 # Cadence words the agent may use, as crontab in settings.TIME_ZONE.
 CADENCES = {

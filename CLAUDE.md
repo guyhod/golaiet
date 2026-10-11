@@ -32,6 +32,12 @@ style in `/Users/guyhod/Kruv/CLAUDE.md` apply here in full.
   globe's legend copies them. Change both together.
 - **One scheduler registrar.** APScheduler jobs are added only in
   `manage.py run_scheduler`, never in `AppConfig.ready()`.
+- **A judgment is written once, by `agent.tools.judge`.** The tool the agent
+  calls and the scripts that judge without a session (prices) both go through
+  it, so the kind's alert rule and the run's provenance apply the same way.
+- **Charts are Apache ECharts through `dashboard/src/chart.ts`.** A view
+  registers the chart types it draws and builds its option as a pure function
+  (tested in Vitest); colours come from the CSS tokens, never literals.
 
 ## Running
 
@@ -73,14 +79,16 @@ Three layers, and every push runs all three in GitHub Actions
 
 ```
 config/      settings, urls, wsgi
-core/        Tracker, Observation, Assessment, Alert, Focus, kinds/ (one module per tracker kind: topic, country_risk)
-scheduler/   Job, JobRun, jobs.py (rows→APScheduler), dispatcher.py, run_scheduler, seed_jobs
+core/        Tracker, Observation, Assessment, Alert, Focus, kinds/ (one module per tracker kind: topic, country_risk, stock)
+scheduler/   Job, JobRun, jobs.py (rows→APScheduler), dispatcher.py, run_scheduler, seed_jobs,
+             scripts/ (jobs without a session: heartbeat, prices)
 chat/        Conversation, Message, telegram.py (send + getUpdates), poller.py, alerts.py (delivery)
 agent/       runner.py (CLI subprocess), tools.py (the functions), prompts.py,
              management/commands/mcp_tools.py (the tool server), flows/{reply,collect,assess,research}.py
 api/         django-ninja read-only API (health, trackers, alerts, focus + its SSE stream)
 dashboard/   Vite + React app with its own Dockerfile (node build → nginx) and nginx.conf;
-             src/views/ is the view registry (feed, globe), src/views/globe/ the MapLibre globe;
+             src/views/ is the view registry (feed, globe, price), src/views/globe/ the MapLibre globe,
+             src/chart.ts the ECharts hook every chart view shares;
              e2e/ the Playwright scenarios (playwright.config.ts)
 tests/       pytest-django; smoke/ (against a running stack), e2e/ (the fakes behind docker-compose.e2e.yml)
 docs/        the planning documents

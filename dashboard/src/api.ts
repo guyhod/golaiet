@@ -37,6 +37,8 @@ export type TrackerDetail = Tracker & {
   recent_observations: Observation[];
 };
 
+export type PricePoint = { at: string; price: number };
+
 export type Alert = {
   id: number;
   tracker: string;

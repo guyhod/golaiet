@@ -5,6 +5,7 @@ MCP config and spoken to over stdio. What differs is the brain: the reply is
 scripted from the prompt's first words, so a run costs nothing and does the
 same thing every time.
 
+    Track <TICKER>, good below <price>    create_tracker (stock kind)
     Track <title> [hourly|daily|weekly]   create_tracker (topic kind)
     Show me <title>                       set_focus on that tracker
     Show everything                       set_focus with no tracker
@@ -30,6 +31,12 @@ def decide(prompt: str) -> tuple[str | None, dict, str]:
     """(tool, arguments, reply) for the prompt; tool None means answer only."""
     words = prompt.strip().split()
     head = " ".join(words[:2]).lower()
+    if words and words[0].lower() == "track" and "good below" in prompt.lower():
+        ticker, line = words[1].strip(",").upper(), float(words[-1])
+        return "create_tracker", {"slug": ticker.lower(), "title": ticker, "kind": "stock",
+                                  "subject": {"ticker": ticker, "good_below": line},
+                                  "brief": "Buy only at a discount to the line.", "cadence": "daily"}, \
+            f"Tracking {ticker}, good below {line:g}."
     if words and words[0].lower() == "track":
         cadence = words[-1].lower() if words[-1].lower() in CADENCES else "weekly"
         title = " ".join(words[1:-1] if cadence == words[-1].lower() else words[1:])
