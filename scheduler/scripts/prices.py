@@ -3,9 +3,11 @@ for every active stock tracker, one tick observation per quote, and the
 threshold rule from the stock kind. A script, not a session: nothing here
 costs anything or needs a model.
 
-The schedule is weekday afternoons in Jerusalem (seed_jobs); the clock that
-decides is New York's, so the weeks when only one side has switched daylight
-saving yield idle passes, not ticks outside trading. Holidays are not
+The schedule is weekday afternoons in Jerusalem from 15:00 (seed_jobs); the
+clock that decides is New York's. New York opens at 16:30 Jerusalem most of
+the year and at 15:30 in the weeks when only the US is on daylight saving
+(2026-10-25 to 11-01, 2027-03-14 to 03-26), so the hour before is idle
+passes rather than a missed first half hour. Holidays are not
 modelled: a holiday is an idle pass with the last close as the price, which
 cannot cross a line it did not cross on the trading day before.
 

@@ -35,7 +35,7 @@ style in `/Users/guyhod/Kruv/CLAUDE.md` apply here in full.
 - **A judgment is written once, by `agent.tools.judge`.** The tool the agent
   calls and the scripts that judge without a session (prices) both go through
   it, so the kind's alert rule and the run's provenance apply the same way.
-- **Charts are Apache ECharts through `dashboard/src/chart.ts`.** A view
+- **Charts are Apache ECharts through `dashboard/src/chart.tsx`.** A view
   registers the chart types it draws and builds its option as a pure function
   (tested in Vitest); colours come from the CSS tokens, never literals.
 
@@ -88,7 +88,7 @@ agent/       runner.py (CLI subprocess), tools.py (the functions), prompts.py,
 api/         django-ninja read-only API (health, trackers, alerts, focus + its SSE stream)
 dashboard/   Vite + React app with its own Dockerfile (node build → nginx) and nginx.conf;
              src/views/ is the view registry (feed, globe, price), src/views/globe/ the MapLibre globe,
-             src/chart.ts the ECharts hook every chart view shares;
+             src/chart.tsx the ECharts component every chart view shares;
              e2e/ the Playwright scenarios (playwright.config.ts)
 tests/       pytest-django; smoke/ (against a running stack), e2e/ (the fakes behind docker-compose.e2e.yml)
 docs/        the planning documents

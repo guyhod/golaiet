@@ -9,6 +9,7 @@ it is re-skipped after a restart (Telegram keeps it 24 h)."""
 import logging
 import time
 
+import httpx
 from django.conf import settings
 from django.db import close_old_connections, models
 from django.utils import timezone
@@ -60,18 +61,32 @@ def handle_update(update: dict) -> None:
     execute_job(reply_job, message_id=inbound.pk)
 
 
+def poll_once(offset: int | None) -> int | None:
+    """One long poll and its updates; returns the next offset. A transport
+    failure (the connection cut mid-handshake, the 40 s read timed out) is
+    one warning line and the same offset back: 13 of them in the 48 h to
+    2026-10-12, every one recovered on the next poll, and each had been
+    logged as two chained tracebacks. Anything else keeps its traceback."""
+    try:
+        if offset is None:
+            offset = stored_offset()
+        for update in telegram.get_updates(offset):
+            handle_update(update)
+            offset = update["update_id"] + 1
+    except httpx.TransportError as failure:
+        log.warning("telegram poll failed (%s: %s); retrying in %ss", type(failure).__name__, failure, RETRY_DELAY_SEC)
+        time.sleep(RETRY_DELAY_SEC)
+    except Exception:
+        log.exception("telegram poll failed; retrying in %ss", RETRY_DELAY_SEC)
+        time.sleep(RETRY_DELAY_SEC)
+    return offset
+
+
 def poll_forever() -> None:
     offset = None
     while True:
         close_old_connections()
         try:
-            if offset is None:
-                offset = stored_offset()
-            for update in telegram.get_updates(offset):
-                handle_update(update)
-                offset = update["update_id"] + 1
-        except Exception:
-            log.exception("telegram poll failed; retrying in %ss", RETRY_DELAY_SEC)
-            time.sleep(RETRY_DELAY_SEC)
+            offset = poll_once(offset)
         finally:
             close_old_connections()

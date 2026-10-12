@@ -35,3 +35,9 @@ def test_focus_alerts_and_stream(tracker):
     first = next(iter(stream.streaming_content)).decode()
     stream.close()
     assert first.startswith("event: focus\ndata: ") and f'"tracker": "{tracker.slug}"' in first
+
+
+@pytest.mark.django_db
+def test_unknown_tracker_is_404():
+    assert Client().get("/api/trackers/nope").status_code == 404
+    assert Client().get("/api/trackers/nope/prices").status_code == 404

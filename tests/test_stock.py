@@ -104,7 +104,7 @@ def test_crossing_alerts_once_and_climbing_back_closes_quietly(ceg, ticking):
 def test_closed_market_and_no_trackers_are_idle_passes(monkeypatch):
     call_command("seed_jobs", verbosity=0)
     job = Job.objects.get(name="prices")
-    assert job.schedule == "*/15 16-23 * * mon-fri"
+    assert job.schedule == "*/15 15-23 * * mon-fri"
     monkeypatch.setattr(prices, "market_open", lambda now=None: False)
     assert execute_job(job).summary == "market closed"
     monkeypatch.setattr(prices, "market_open", lambda now=None: True)

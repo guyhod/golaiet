@@ -7,6 +7,7 @@ from datetime import timedelta
 
 from django.db import close_old_connections
 from django.http import StreamingHttpResponse
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from ninja import NinjaAPI
 
@@ -79,7 +80,7 @@ def trackers(request):
 def tracker_detail(request, slug: str, limit: int = 50, sourced: bool = False):
     """sourced=true keeps only observations with a URL: a stock's news without
     its ticks, which the price view takes from /prices instead."""
-    tracker = Tracker.objects.get(slug=slug)
+    tracker = get_object_or_404(Tracker, slug=slug)
     recent = tracker.observations.order_by("-observed_at")
     if sourced:
         recent = recent.exclude(source_url="")
@@ -94,7 +95,7 @@ def tracker_detail(request, slug: str, limit: int = 50, sourced: bool = False):
 def prices(request, slug: str, days: int = 30):
     """The tracker's price ticks, oldest first, for the chart."""
     since = timezone.now() - timedelta(days=max(1, min(days, 366)))
-    ticks = Tracker.objects.get(slug=slug).observations.filter(observed_at__gte=since, payload__has_key="price").order_by("observed_at")
+    ticks = get_object_or_404(Tracker, slug=slug).observations.filter(observed_at__gte=since, payload__has_key="price").order_by("observed_at")
     return [{"at": tick.observed_at, "price": tick.payload["price"]} for tick in ticks]
 
 

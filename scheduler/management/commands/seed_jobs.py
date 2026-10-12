@@ -12,7 +12,7 @@ SEED = (
          target="agent.flows.reply.run"),
     dict(name="heartbeat", kind=Job.Kind.HEARTBEAT, trigger=Job.Trigger.INTERVAL, schedule="1800",
          target="scheduler.scripts.heartbeat.run"),
-    dict(name="prices", kind=Job.Kind.COLLECT, trigger=Job.Trigger.CRON, schedule="*/15 16-23 * * mon-fri",
+    dict(name="prices", kind=Job.Kind.COLLECT, trigger=Job.Trigger.CRON, schedule="*/15 15-23 * * mon-fri",
          target="scheduler.scripts.prices.run"),
 )
 

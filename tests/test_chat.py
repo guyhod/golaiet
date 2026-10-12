@@ -44,3 +44,19 @@ def test_get_updates_failure_names_status_not_token(monkeypatch, settings):
     with pytest.raises(RuntimeError) as failure:
         telegram.get_updates(None)
     assert "http 409 Conflict: webhook is active" in str(failure.value) and "SECRET" not in str(failure.value)
+
+
+@pytest.mark.django_db
+def test_poll_once_logs_a_transport_failure_as_one_line(monkeypatch, caplog):
+    import httpx
+    from chat import telegram
+
+    def cut(offset):
+        raise httpx.ConnectError("[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol")
+
+    monkeypatch.setattr(telegram, "get_updates", cut)
+    monkeypatch.setattr(poller.time, "sleep", lambda seconds: None)
+    with caplog.at_level("WARNING", logger="chat.poller"):
+        assert poller.poll_once(7) == 7
+    [record] = caplog.records
+    assert record.levelname == "WARNING" and "ConnectError" in record.getMessage() and record.exc_info is None
