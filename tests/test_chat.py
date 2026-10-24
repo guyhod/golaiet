@@ -60,3 +60,22 @@ def test_poll_once_logs_a_transport_failure_as_one_line(monkeypatch, caplog):
         assert poller.poll_once(7) == 7
     [record] = caplog.records
     assert record.levelname == "WARNING" and "ConnectError" in record.getMessage() and record.exc_info is None
+
+
+@pytest.mark.django_db
+def test_retry_resends_last_days_failed_alerts_only(tracker, settings, monkeypatch):
+    from datetime import timedelta
+    from django.utils import timezone
+    from chat import alerts, telegram
+    from core.models import Alert
+    settings.TELEGRAM_BOT_TOKEN, settings.TELEGRAM_CHAT_ID = "123:x", "1"
+    sent = []
+    monkeypatch.setattr(telegram, "send", lambda text, **kw: sent.append(text) or 5)
+    fresh = Alert.objects.create(tracker=tracker, text="France: calm → warm.", delivery_error="sendMessage failed")
+    old = Alert.objects.create(tracker=tracker, text="stale", delivery_error="sendMessage failed")
+    Alert.objects.filter(pk=old.pk).update(created_at=timezone.now() - timedelta(hours=25))
+    landed = Alert.objects.create(tracker=tracker, text="done", delivered_at=timezone.now())
+    assert alerts.retry() == 1 and sent == ["🔔 France: calm → warm."]
+    fresh.refresh_from_db(); old.refresh_from_db()
+    assert fresh.delivered_at is not None and fresh.delivery_error == "" and old.delivered_at is None
+    assert Alert.objects.get(pk=landed.pk).delivered_at == landed.delivered_at
