@@ -4,7 +4,7 @@ import type { Tracker, TrackerDetail } from "../api";
 import { getJson, formatWhen, hostOf } from "../api";
 import type { ViewProps } from "./index";
 import { boundsOfCountry } from "./globe/countries";
-import { createMap, fillLayerId, fitWorld, flyToCountry, paint, select } from "./globe/createMap";
+import { createMap, fillLayerId, fitWorld, flyToCountry, paint, select, type ColourBy } from "./globe/createMap";
 
 const REFRESH_MS = 60_000;
 
@@ -38,6 +38,7 @@ export function Globe({ slug, onClose }: ViewProps) {
   const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<MapLibreMap | null>(null);
+  const [colourBy, setColourBy] = useState<ColourBy>("level");
   const byNumeric = useMemo(
     () => new Map(countries.map((country) => [String(country.subject.numeric), country])),
     [countries],
@@ -80,8 +81,11 @@ export function Globe({ slug, onClose }: ViewProps) {
 
   useEffect(() => {
     if (!map) return;
-    paint(map, countries.map((country) => ({ numeric: String(country.subject.numeric), level_rank: country.level_rank })));
-  }, [map, countries]);
+    paint(map, countries.map((country) => ({
+      numeric: String(country.subject.numeric), level_rank: country.level_rank,
+      peace_score: (country.latest_assessment?.state as CountryState | undefined)?.peace_score ?? null,
+    })), colourBy);
+  }, [map, countries, colourBy]);
 
   useEffect(() => {
     if (!map) return;
@@ -113,11 +117,28 @@ export function Globe({ slug, onClose }: ViewProps) {
     <div className="globe">
       <div className="globe-map">
         <div ref={containerRef} className="globe-canvas" />
-        <ul className="legend">
-          {LEGEND.map(([rank, word, meaning]) => (
-            <li key={word} className={`lvl-${rank}`}><span className="swatch" />{word} <span className="muted">{meaning}</span></li>
-          ))}
-        </ul>
+        <div className="legend">
+          <div className="colour-by" role="radiogroup" aria-label="colour by">
+            {(["level", "score"] as const).map((choice) => (
+              <button key={choice} role="radio" aria-checked={colourBy === choice} className={colourBy === choice ? "on" : ""} onClick={() => setColourBy(choice)}>
+                {choice === "level" ? "hottest conflict" : "peace score"}
+              </button>
+            ))}
+          </div>
+          {colourBy === "level" ? (
+            <ul>
+              {LEGEND.map(([rank, word, meaning]) => (
+                <li key={word} className={`lvl-${rank}`}><span className="swatch" />{word} <span className="muted">{meaning}</span></li>
+              ))}
+            </ul>
+          ) : (
+            <div className="score-scale">
+              <div className="score-gradient" />
+              <div className="score-ends muted"><span>0 · at war</span><span>50</span><span>100 · at peace</span></div>
+              <div className="muted">how peaceful the country is as a whole, judged with the conflicts</div>
+            </div>
+          )}
+        </div>
       </div>
       <aside className="record">
         <div className="feed-head">

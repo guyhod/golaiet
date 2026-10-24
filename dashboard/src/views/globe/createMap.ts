@@ -7,6 +7,7 @@ import { Map as MapLibreMap, setWorkerUrl, type ExpressionSpecification, type Fi
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { countryShapes, type Bounds } from "./countries";
+import { scoreColour } from "./scoreColour";
 
 setWorkerUrl(maplibreWorkerUrl);
 
@@ -17,7 +18,9 @@ const WORLD_CENTER: [number, number] = [35, 30];
 const FOCUS_MAX_ZOOM = 6;
 const FLY_MS = 900;
 
-export type Painted = { numeric: string; level_rank: number };
+export type Painted = { numeric: string; level_rank: number; peace_score: number | null };
+/** What the fill shows: the level (the hottest conflict filed) or the peace score. */
+export type ColourBy = "level" | "score";
 
 // Colours live only in styles.css; a missing token throws instead of hiding behind a default.
 function token(name: string): string {
@@ -30,13 +33,19 @@ function countryFilter(numerics: string[]): FilterSpecification {
   return ["in", ["get", "numeric"], ["literal", numerics]];
 }
 
-function fillColour(painted: Painted[]): string | ExpressionSpecification {
+export function scoreStops() {
+  return { hot: token("--heat-4"), warm: token("--heat-3"), calm: token("--heat-0") };
+}
+
+function fillColour(painted: Painted[], by: ColourBy): string | ExpressionSpecification {
   const none = token("--heat-none");
-  const pairs: [string[], string][] = [];
-  for (const rank of [0, 1, 2, 3, 4]) {
-    const numerics = painted.filter((country) => country.level_rank === rank).map((country) => country.numeric);
-    if (numerics.length) pairs.push([numerics, token(`--heat-${rank}`)]);
+  const byColour = new Map<string, string[]>();
+  for (const country of painted) {
+    const colour = by === "level" ? (country.level_rank >= 0 ? token(`--heat-${country.level_rank}`) : null)
+      : country.peace_score === null ? null : scoreColour(country.peace_score, scoreStops());
+    if (colour) byColour.set(colour, [...(byColour.get(colour) ?? []), country.numeric]);
   }
+  const pairs: [string[], string][] = [...byColour].map(([colour, numerics]) => [numerics, colour]);
   if (!pairs.length) return none;
   const [[firstNumerics, firstColour], ...rest] = pairs;
   return ["match", ["get", "numeric"], firstNumerics, firstColour, ...rest.flat(), none];
@@ -79,8 +88,8 @@ export function createMap(container: HTMLElement): MapLibreMap {
 
 export const fillLayerId = FILL;
 
-export function paint(map: MapLibreMap, painted: Painted[]) {
-  map.setPaintProperty(FILL, "fill-color", fillColour(painted));
+export function paint(map: MapLibreMap, painted: Painted[], by: ColourBy) {
+  map.setPaintProperty(FILL, "fill-color", fillColour(painted, by));
 }
 
 export function select(map: MapLibreMap, numeric: string | null) {
