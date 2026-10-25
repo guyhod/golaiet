@@ -18,9 +18,9 @@ const WORLD_CENTER: [number, number] = [35, 30];
 const FOCUS_MAX_ZOOM = 6;
 const FLY_MS = 900;
 
-export type Painted = { numeric: string; level_rank: number; peace_score: number | null };
-/** What the fill shows: the level (the hottest conflict filed) or the peace score. */
-export type ColourBy = "level" | "score";
+export type Painted = { numeric: string; level_rank: number; peace_score: number | null; trend: string | null };
+/** What the fill shows: the level (the hottest conflict filed), the peace score, or its trend since the previous judgment. */
+export type ColourBy = "level" | "score" | "trend";
 
 // Colours live only in styles.css; a missing token throws instead of hiding behind a default.
 function token(name: string): string {
@@ -42,7 +42,8 @@ function fillColour(painted: Painted[], by: ColourBy): string | ExpressionSpecif
   const byColour = new Map<string, string[]>();
   for (const country of painted) {
     const colour = by === "level" ? (country.level_rank >= 0 ? token(`--heat-${country.level_rank}`) : null)
-      : country.peace_score === null ? null : scoreColour(country.peace_score, scoreStops());
+      : by === "score" ? (country.peace_score === null ? null : scoreColour(country.peace_score, scoreStops()))
+      : country.trend === null ? null : token(`--trend-${country.trend}`);
     if (colour) byColour.set(colour, [...(byColour.get(colour) ?? []), country.numeric]);
   }
   const pairs: [string[], string][] = [...byColour].map(([colour, numerics]) => [numerics, colour]);

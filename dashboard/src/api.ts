@@ -93,3 +93,8 @@ export function hostOf(url: string): string {
     return url;
   }
 }
+
+/** The glyph for a judgment's trend word: up, down, or level. */
+export function arrowOf(trend: string): string {
+  return trend === "improving" ? "▲" : trend === "worsening" ? "▼" : "●";
+}

@@ -17,6 +17,11 @@
   --heat-3: #cc6b00;
   --heat-4: #ff735d;
   --heat-none: #303030;
+  /* Trend of the peace score since the previous judgment; none is a first judgment or no tracker. */
+  --trend-improving: #22c55e;
+  --trend-stable: #5b6472;
+  --trend-worsening: #ef4444;
+  --trend-none: #303030;
   --map-water: #202020;
   --map-selected: #ffffff;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -45,6 +50,11 @@ p { margin: 0.3rem 0; line-height: 1.4; }
 
 main { flex: 1; padding: 1.2rem 1.4rem; }
 
+.controls { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+.chips { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.chip { padding: 0.2rem 0.7rem; border: 1px solid var(--line); border-radius: 1rem; color: var(--muted); font-size: 0.9rem; }
+.chip.on { color: var(--text); border-color: var(--level-colour, var(--text)); }
+.controls select { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 0.3rem; padding: 0.2rem 0.4rem; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr)); gap: 1rem; }
 .tile { background: var(--panel); border: 1px solid var(--line); border-top: 0.4rem solid var(--level-colour);
         border-radius: 0.6rem; padding: 1rem 1.2rem; display: flex; flex-direction: column; gap: 0.5rem; }
@@ -85,9 +95,10 @@ main { flex: 1; padding: 1.2rem 1.4rem; }
 .score-bar { height: 0.4rem; background: var(--line); border-radius: 0.2rem; margin: 0.6rem 0; overflow: hidden; }
 .score-bar div { height: 100%; background: linear-gradient(90deg, var(--heat-4), var(--heat-3) 50%, var(--heat-0)); }
 .trend { font-size: 0.9rem; font-weight: 600; }
-.trend-improving { color: #22c55e; }
-.trend-worsening { color: #ef4444; }
-.trend-stable { color: var(--muted); }
+.trend-improving { color: var(--trend-improving); --heat-colour: var(--trend-improving); }
+.trend-stable { color: var(--muted); --heat-colour: var(--trend-stable); }
+.trend-worsening { color: var(--trend-worsening); --heat-colour: var(--trend-worsening); }
+.trend-none { --heat-colour: var(--trend-none); }
 .conflict { border-left: 0.3rem solid var(--heat-colour); background: var(--panel); border-radius: 0.3rem; padding: 0.6rem 0.9rem; margin: 0.5rem 0; }
 .conflict-title { font-weight: 600; font-size: 1rem; padding: 0; }
 .conflict-detail { border-top: 1px solid var(--line); margin-top: 0.4rem; padding-top: 0.4rem; }

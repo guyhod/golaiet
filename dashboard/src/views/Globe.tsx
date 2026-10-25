@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Map as MapLibreMap, MapLayerMouseEvent } from "maplibre-gl";
 import type { Tracker, TrackerDetail } from "../api";
-import { getJson, formatWhen, hostOf } from "../api";
+import { arrowOf, getJson, formatWhen, hostOf } from "../api";
 import type { ViewProps } from "./index";
 import { boundsOfCountry } from "./globe/countries";
 import { createMap, fillLayerId, fitWorld, flyToCountry, paint, select, type ColourBy } from "./globe/createMap";
@@ -29,6 +29,15 @@ const LEGEND: [rank: number, word: string, meaning: string][] = [
   [0, "calm", "researched, no conflicts"],
   [-1, "no data", "no tracker for this country"],
 ];
+// Copies TREND_STEP in core/kinds/country_risk.py: a trend is the peace score
+// against the previous judgment, five points either way. Change them together.
+const TREND_LEGEND: [word: string, meaning: string][] = [
+  ["improving", "peace score up 5 or more since the previous judgment"],
+  ["stable", "within 5 points"],
+  ["worsening", "down 5 or more"],
+  ["none", "one judgment so far, or no tracker"],
+];
+const COLOUR_BY: [ColourBy, string][] = [["level", "hottest conflict"], ["score", "peace score"], ["trend", "trend"]];
 
 /** The globe painted by every country tracker's level, with one country's record beside it. */
 export function Globe({ slug, onClose }: ViewProps) {
@@ -84,6 +93,7 @@ export function Globe({ slug, onClose }: ViewProps) {
     paint(map, countries.map((country) => ({
       numeric: String(country.subject.numeric), level_rank: country.level_rank,
       peace_score: (country.latest_assessment?.state as CountryState | undefined)?.peace_score ?? null,
+      trend: (country.latest_assessment?.state as CountryState | undefined)?.trend ?? null,
     })), colourBy);
   }, [map, countries, colourBy]);
 
@@ -119,9 +129,9 @@ export function Globe({ slug, onClose }: ViewProps) {
         <div ref={containerRef} className="globe-canvas" />
         <div className="legend">
           <div className="colour-by" role="radiogroup" aria-label="colour by">
-            {(["level", "score"] as const).map((choice) => (
+            {COLOUR_BY.map(([choice, word]) => (
               <button key={choice} role="radio" aria-checked={colourBy === choice} className={colourBy === choice ? "on" : ""} onClick={() => setColourBy(choice)}>
-                {choice === "level" ? "hottest conflict" : "peace score"}
+                {word}
               </button>
             ))}
           </div>
@@ -129,6 +139,12 @@ export function Globe({ slug, onClose }: ViewProps) {
             <ul>
               {LEGEND.map(([rank, word, meaning]) => (
                 <li key={word} className={`lvl-${rank}`}><span className="swatch" />{word} <span className="muted">{meaning}</span></li>
+              ))}
+            </ul>
+          ) : colourBy === "trend" ? (
+            <ul>
+              {TREND_LEGEND.map(([word, meaning]) => (
+                <li key={word} className={`trend-${word}`}><span className="swatch" />{word} <span className="muted">{meaning}</span></li>
               ))}
             </ul>
           ) : (
@@ -155,7 +171,7 @@ export function Globe({ slug, onClose }: ViewProps) {
                 <div><span className="section-label">Peace score</span><div className="score-value">{state.peace_score}<span className="muted">/100</span></div></div>
                 {state.trend && (
                   <span className={`trend trend-${state.trend}`}>
-                    {state.trend === "improving" ? "▲" : state.trend === "worsening" ? "▼" : "●"} {state.trend}
+                    {arrowOf(state.trend)} {state.trend}
                     {state.peace_score_change ? ` (${state.peace_score_change > 0 ? "+" : ""}${state.peace_score_change})` : ""}
                   </span>
                 )}

@@ -27,7 +27,7 @@ style in `/Users/guyhod/Kruv/CLAUDE.md` apply here in full.
   module under `core/kinds/` plus a view.
 - **The tool server never talks to Telegram.** Alerts a session raises are
   rows; the flow delivers them after the CLI has exited (`chat/alerts.py`).
-- **Heat and conflict kind definitions live once**, in
+- **Heat and conflict kind definitions, and the trend step, live once**, in
   `core/kinds/country_risk.py`; the research prompt renders them and the
   globe's legend copies them. Change both together.
 - **One scheduler registrar.** APScheduler jobs are added only in
