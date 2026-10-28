@@ -36,9 +36,12 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 h1, h2 { margin: 0; font-weight: 600; }
 p { margin: 0.3rem 0; line-height: 1.4; }
 
-.app { min-height: 100vh; display: flex; flex-direction: column; }
+.app { height: 100vh; display: flex; flex-direction: column; }
 .bar { display: flex; align-items: baseline; gap: 1.2rem; padding: 0.8rem 1.4rem; border-bottom: 1px solid var(--line); }
 .brand { font-size: 1.4rem; font-weight: 700; letter-spacing: 0.04em; }
+.tabs { display: flex; gap: 0.3rem; }
+.tabs button { padding: 0.2rem 0.8rem; border: 1px solid var(--line); border-radius: 0.3rem; color: var(--muted); }
+.tabs button.on { color: var(--text); border-color: var(--text); }
 .note { margin-left: auto; color: var(--muted); font-style: italic; }
 .muted { color: var(--muted); }
 .small { font-size: 0.85rem; }
@@ -49,6 +52,9 @@ p { margin: 0.3rem 0; line-height: 1.4; }
 .banner.alert { border-left: 0.5rem solid var(--level-colour); background: var(--panel); }
 
 main { flex: 1; padding: 1.2rem 1.4rem; }
+/* The globe screen fills what the bar leaves, with no page scroll: the record pane scrolls on its own. */
+main.full { padding: 0; display: flex; flex-direction: column; min-height: 0; }
+main.full > .globe { flex: 1; height: auto; min-height: 0; }
 
 .controls { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
 .controls .chips { margin-right: auto; }

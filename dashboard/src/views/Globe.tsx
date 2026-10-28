@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Map as MapLibreMap, MapLayerMouseEvent } from "maplibre-gl";
 import type { Tracker, TrackerDetail } from "../api";
 import { arrowOf, getJson, formatWhen, hostOf } from "../api";
-import type { ViewProps } from "./index";
 import { boundsOfCountry } from "./globe/countries";
 import { countryState, HEAT_RANK, LEGEND, LENSES, lensRanks, TREND_LEGEND, type Lens } from "./country";
 import { createMap, fillLayerId, fitWorld, flyToCountry, paint, select, type ColourBy } from "./globe/createMap";
@@ -11,10 +10,10 @@ const REFRESH_MS = 60_000;
 
 const COLOUR_BY: [ColourBy, string][] = [["level", "hottest lens"], ["score", "peace score"], ["trend", "trend"]];
 
-/** The globe painted by every country tracker's level, with one country's record beside it. */
-export function Globe({ slug, onClose }: ViewProps) {
+/** The globe painted by every country tracker's level, with the record of the country picked on it, by a
+ *  click or by the screen, beside it. */
+export function Globe({ shown, onShow }: { shown: string | null; onShow: (slug: string | null) => void }) {
   const [countries, setCountries] = useState<Tracker[]>([]);
-  const [shown, setShown] = useState(slug);
   const [detail, setDetail] = useState<TrackerDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -26,8 +25,6 @@ export function Globe({ slug, onClose }: ViewProps) {
   );
   const byNumericRef = useRef(byNumeric);
   byNumericRef.current = byNumeric;
-
-  useEffect(() => setShown(slug), [slug]);
 
   useEffect(() => {
     let cancelled = false;
@@ -43,6 +40,7 @@ export function Globe({ slug, onClose }: ViewProps) {
   useEffect(() => {
     let cancelled = false;
     setDetail(null);
+    if (!shown) return;
     const load = () =>
       getJson<TrackerDetail>(`/api/trackers/${shown}?limit=100`)
         .then((loaded) => !cancelled && (setDetail(loaded), setError(null)))
@@ -75,7 +73,7 @@ export function Globe({ slug, onClose }: ViewProps) {
     const onClick = (event: MapLayerMouseEvent) => {
       const numeric = event.features?.[0]?.properties.numeric;
       const tracker = typeof numeric === "string" ? byNumericRef.current.get(numeric) : undefined;
-      if (tracker) setShown(tracker.slug);
+      if (tracker) onShow(tracker.slug);
     };
     const onMove = (event: MapLayerMouseEvent) => {
       const numeric = event.features?.[0]?.properties.numeric;
@@ -87,7 +85,11 @@ export function Globe({ slug, onClose }: ViewProps) {
   }, [map]);
 
   useEffect(() => {
-    if (!map || !detail) return;
+    if (!map) return;
+    if (!detail) {
+      select(map, null);
+      return;
+    }
     const numeric = String(detail.subject.numeric);
     select(map, numeric);
     const bounds = boundsOfCountry(numeric);
@@ -137,11 +139,15 @@ export function Globe({ slug, onClose }: ViewProps) {
         </div>
       </div>
       <aside className="record">
-        <div className="feed-head">
-          <h1>{detail?.title ?? shown}</h1>
-          <span className={`level lvl-${detail?.level_rank ?? -1}`}>{detail?.level ?? "unjudged"}</span>
-          <button className="close" onClick={onClose} aria-label="close">×</button>
-        </div>
+        {shown ? (
+          <div className="feed-head">
+            <h1>{detail?.title ?? shown}</h1>
+            <span className={`level lvl-${detail?.level_rank ?? -1}`}>{detail?.level ?? "unjudged"}</span>
+            <button className="close" onClick={() => onShow(null)} aria-label="close">×</button>
+          </div>
+        ) : (
+          <p className="muted">Click a country for its record.</p>
+        )}
         {error && <p className="empty">{error}</p>}
         {detail && !state && <p className="muted">No judgment yet; the first research run writes one.</p>}
         {detail && state && (

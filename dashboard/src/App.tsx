@@ -2,13 +2,17 @@ import { useEffect, useState } from "react";
 import { getJson, watchFocus, formatWhen } from "./api";
 import type { Alert, Focus, Health, Tracker } from "./api";
 import { Module } from "./Module";
+import { Globe } from "./views/Globe";
 import { Overview } from "./views/Overview";
 import { viewFor } from "./views";
 
-/** The overview is always on screen. One tracker may be open over it, in its
- *  own view, as a module in the centre: a focus event from a conversation
- *  opens or closes it, and so does a click on a tile. */
+/** The screen is the globe (the default) or the list of tiles; the bar switches
+ *  them. A country tracker opens on the globe, its kind's view; any other
+ *  tracker opens in its own view as a module over the screen. A focus event
+ *  from a conversation opens or closes either, and so does a click on a tile. */
 export type Open = { slug: string; view: string; params: Record<string, unknown> } | null;
+type Screen = "globe" | "list";
+const SCREENS: [Screen, string][] = [["globe", "Globe"], ["list", "List"]];
 
 const REFRESH_MS = 60_000;
 const ALERT_BANNER_HOURS = 24;
@@ -19,6 +23,8 @@ export function App() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [focus, setFocus] = useState<Focus | null>(null);
   const [open, setOpen] = useState<Open>(null);
+  const [screen, setScreen] = useState<Screen>("globe");
+  const [picked, setPicked] = useState<string | null>(null);
   const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,11 +55,22 @@ export function App() {
     };
   }, []);
 
+  const show = (slug: string | null, view: string, params: Record<string, unknown>) => {
+    if (slug && view === "globe") {
+      setScreen("globe");
+      setPicked(slug);
+      setOpen(null);
+    } else {
+      setOpen(slug ? { slug, view, params } : null);
+      if (!slug) setPicked(null);
+    }
+  };
+
   useEffect(
     () =>
       watchFocus((pushed) => {
         setFocus(pushed);
-        setOpen(pushed.tracker ? { slug: pushed.tracker, view: pushed.view, params: pushed.view_params } : null);
+        show(pushed.tracker, pushed.view, pushed.view_params);
       }),
     [],
   );
@@ -69,6 +86,13 @@ export function App() {
         <button className="brand" onClick={() => setOpen(null)}>
           Golaiet
         </button>
+        <nav className="tabs" role="tablist" aria-label="screen">
+          {SCREENS.map(([choice, word]) => (
+            <button key={choice} role="tab" aria-selected={screen === choice} className={screen === choice ? "on" : ""} onClick={() => setScreen(choice)}>
+              {word}
+            </button>
+          ))}
+        </nav>
         <span className="muted">
           {health ? `heartbeat ${formatWhen(health.last_heartbeat)}` : "connecting…"}
           {refreshedAt ? ` · screen ${formatWhen(refreshedAt.toISOString())}` : ""}
@@ -88,9 +112,11 @@ export function App() {
         </div>
       )}
 
-      <main>
-        <Overview trackers={trackers} onOpen={(tracker) => setOpen({ slug: tracker.slug, view: tracker.view, params: {} })} />
-      </main>
+      {screen === "globe" ? (
+        <main className="full"><Globe shown={picked} onShow={setPicked} /></main>
+      ) : (
+        <main><Overview trackers={trackers} onOpen={(tracker) => show(tracker.slug, tracker.view, {})} /></main>
+      )}
 
       {open && view && (
         <Module wide={view.wide} onClose={() => setOpen(null)}>

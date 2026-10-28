@@ -24,12 +24,14 @@ test.describe.configure({ mode: "serial" });
 test("track X in chat makes a tile on the screen", async ({ page }) => {
   expect(await say("Track VRAM supply weekly")).toBe("Tracking VRAM supply weekly.");
   await page.goto("/");
+  await page.getByRole("tab", { name: "List" }).click();
   await expect(page.getByRole("button", { name: /VRAM supply/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /VRAM supply/ })).toContainText("unjudged");
 });
 
 test("show me X opens it over the stream, show everything closes it", async ({ page }) => {
   await page.goto("/");
+  await page.getByRole("tab", { name: "List" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   expect(await say("Show me VRAM supply")).toBe("VRAM supply is on screen.");
   await expect(page.getByRole("dialog").getByRole("heading", { name: "VRAM supply" })).toBeVisible();
@@ -43,6 +45,7 @@ test("a level change reaches Telegram once and lands in the banner", async ({ pa
     "🔔 VRAM supply: quiet → elevated. Marked by the end-to-end test.",
   );
   await page.goto("/");
+  await page.getByRole("tab", { name: "List" }).click();
   await expect(page.locator(".banner.alert")).toContainText("VRAM supply: quiet → elevated");
   await expect(page.getByRole("button", { name: /VRAM supply/ })).toContainText("elevated");
 
@@ -55,6 +58,7 @@ test("a level change reaches Telegram once and lands in the banner", async ({ pa
 test("track a stock with a line opens the price view", async ({ page }) => {
   expect(await say("Track CEG, good below 170")).toBe("Tracking CEG, good below 170.");
   await page.goto("/");
+  await page.getByRole("tab", { name: "List" }).click();
   await expect(page.getByRole("button", { name: /CEG/ })).toBeVisible();
   expect(await say("Show me CEG")).toBe("CEG is on screen.");
   const dialog = page.getByRole("dialog");
