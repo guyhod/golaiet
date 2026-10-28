@@ -35,6 +35,11 @@ describe("arrange", () => {
   it("filters to one level", () => {
     expect(arrange([...all], "level", "warm").map((t) => t.slug)).toEqual(["egy", "prt"]);
   });
+  it("filters to one trend", () => {
+    expect(arrange([...all], "level", null, null, "worsening").map((t) => t.slug)).toEqual(["pse"]);
+    expect(arrange([...all], "level", null, null, "stable").map((t) => t.slug)).toEqual(["egy"]);
+    expect(arrange([...all], "level", "hot", null, "improving").map((t) => t.slug)).toEqual(["syr"]);
+  });
   it("reads countries through a lens and leaves out trackers not judged on it", () => {
     expect(arrange([...all], "level", null, "antisemitism").map((t) => t.slug)).toEqual(["bel", "prt"]);
     expect(arrange([...all], "level", "warm", "islam").map((t) => t.slug)).toEqual(["prt"]);

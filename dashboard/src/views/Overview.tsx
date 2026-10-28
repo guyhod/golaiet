@@ -2,14 +2,15 @@ import { useState } from "react";
 import type { Tracker } from "../api";
 import { arrowOf, formatWhen } from "../api";
 import { LENSES } from "./country";
-import { arrange, levelOf, levelsOf, SORTS, trendOf, type SortBy } from "./overview/arrange";
+import { arrange, levelOf, levelsOf, SORTS, trendOf, TRENDS, type SortBy } from "./overview/arrange";
 
-/** Every active tracker as a tile; chips pick a level, the controls pick the order and the lens the level is read through. */
+/** Every active tracker as a tile; chips pick a level and a trend, the controls pick the order and the lens the level is read through. */
 export function Overview({ trackers, onOpen }: { trackers: Tracker[]; onOpen: (tracker: Tracker) => void }) {
   const [sort, setSort] = useState<SortBy>("level");
   const [level, setLevel] = useState<string | null>(null);
   const [lens, setLens] = useState<string | null>(null);
-  const shown = arrange(trackers, sort, level, lens);
+  const [trend, setTrend] = useState<string | null>(null);
+  const shown = arrange(trackers, sort, level, lens, trend);
   if (!trackers.some((tracker) => tracker.status === "active")) {
     return <p className="empty">Nothing is tracked yet. Say “track …” in Telegram.</p>;
   }
@@ -21,6 +22,14 @@ export function Overview({ trackers, onOpen }: { trackers: Tracker[]; onOpen: (t
           {levelsOf(trackers, lens).map(({ level: word, rank }) => (
             <button key={word} role="radio" aria-checked={level === word} className={`chip lvl-${rank}${level === word ? " on" : ""}`} onClick={() => setLevel(word)}>
               {word}
+            </button>
+          ))}
+        </div>
+        <div className="chips" role="radiogroup" aria-label="trend">
+          <button role="radio" aria-checked={trend === null} className={`chip${trend === null ? " on" : ""}`} onClick={() => setTrend(null)}>any trend</button>
+          {TRENDS.map((word) => (
+            <button key={word} role="radio" aria-checked={trend === word} className={`chip trend-${word}${trend === word ? " on" : ""}`} onClick={() => setTrend(word)}>
+              {arrowOf(word)} {word}
             </button>
           ))}
         </div>
@@ -38,7 +47,7 @@ export function Overview({ trackers, onOpen }: { trackers: Tracker[]; onOpen: (t
           </select>
         </label>
       </div>
-      {!shown.length && <p className="empty">{lens ? "No country judged on this lens yet." : "No tracker at this level."}</p>}
+      {!shown.length && <p className="empty">{lens ? "No country judged on this lens yet." : "No tracker matches."}</p>}
       <div className="tiles">
         {shown.map((tracker) => {
           const trend = trendOf(tracker);

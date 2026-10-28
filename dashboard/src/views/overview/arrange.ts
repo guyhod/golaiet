@@ -3,6 +3,8 @@ import type { Tracker } from "../../api";
 import { lensHeat } from "../country";
 
 export type SortBy = "level" | "score" | "trend" | "recent";
+/** The trend words a judgment can carry, in the order the chips show them. */
+export const TRENDS = ["improving", "stable", "worsening"] as const;
 /** The orders offered, with the words on the control. Each puts what needs attention first. */
 export const SORTS: [SortBy, string][] = [
   ["level", "hottest"],
@@ -49,12 +51,14 @@ function compareNullable(a: number | null, b: number | null): number {
   return a - b;
 }
 
-/** The active trackers at the chosen level (null for all), in the chosen order; with a lens, only the
+/** The active trackers at the chosen level and trend (null for all), in the chosen order; with a lens, only the
  * countries judged on it, read through that lens. */
-export function arrange(trackers: Tracker[], sort: SortBy, level: string | null, lens: string | null = null): Tracker[] {
+export function arrange(trackers: Tracker[], sort: SortBy, level: string | null, lens: string | null = null,
+                        trend: string | null = null): Tracker[] {
   const shown = trackers.filter((tracker) => tracker.status === "active"
     && (lens === null || lensHeat(tracker, lens) !== null)
-    && (level === null || levelOf(tracker, lens).level === level));
+    && (level === null || levelOf(tracker, lens).level === level)
+    && (trend === null || trendOf(tracker)?.word === trend));
   const byLevel = (a: Tracker, b: Tracker): number =>
     levelOf(b, lens).rank - levelOf(a, lens).rank || (b.latest_observation_at ?? "").localeCompare(a.latest_observation_at ?? "");
   const compare: Record<SortBy, (a: Tracker, b: Tracker) => number> = {

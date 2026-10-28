@@ -54,7 +54,7 @@ main { flex: 1; padding: 1.2rem 1.4rem; }
 .controls .chips { margin-right: auto; }
 .chips { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 .chip { padding: 0.2rem 0.7rem; border: 1px solid var(--line); border-radius: 1rem; color: var(--muted); font-size: 0.9rem; }
-.chip.on { color: var(--text); border-color: var(--level-colour, var(--text)); }
+.chip.on { color: var(--text); border-color: var(--level-colour, var(--heat-colour, var(--text))); }
 .controls select { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 0.3rem; padding: 0.2rem 0.4rem; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr)); gap: 1rem; }
 .tile { background: var(--panel); border: 1px solid var(--line); border-top: 0.4rem solid var(--level-colour);
