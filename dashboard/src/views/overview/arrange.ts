@@ -1,5 +1,6 @@
 // The overview's order and filter: pure, so Vitest covers it.
 import type { Tracker } from "../../api";
+import { lensHeat } from "../country";
 
 export type SortBy = "level" | "score" | "trend" | "recent";
 /** The orders offered, with the words on the control. Each puts what needs attention first. */
@@ -25,10 +26,20 @@ export function trendOf(tracker: Tracker): { word: string; change: number } | nu
     : null;
 }
 
+/** The level a tile shows: the tracker's own, or one lens's heat on a country when a lens is chosen. */
+export function levelOf(tracker: Tracker, lens: string | null): { level: string | null; rank: number } {
+  if (lens === null) return { level: tracker.level, rank: tracker.level_rank };
+  const heat = lensHeat(tracker, lens);
+  return heat ? { level: heat.heat, rank: heat.rank } : { level: null, rank: -1 };
+}
+
 /** The levels judged among these trackers, hottest first, for the filter chips. */
-export function levelsOf(trackers: Tracker[]): { level: string; rank: number }[] {
+export function levelsOf(trackers: Tracker[], lens: string | null): { level: string; rank: number }[] {
   const seen = new Map<string, number>();
-  for (const tracker of trackers) if (tracker.level) seen.set(tracker.level, tracker.level_rank);
+  for (const tracker of trackers) {
+    const { level, rank } = levelOf(tracker, lens);
+    if (level) seen.set(level, rank);
+  }
   return [...seen].map(([level, rank]) => ({ level, rank })).sort((a, b) => b.rank - a.rank || a.level.localeCompare(b.level));
 }
 
@@ -38,13 +49,14 @@ function compareNullable(a: number | null, b: number | null): number {
   return a - b;
 }
 
-function byLevel(a: Tracker, b: Tracker): number {
-  return b.level_rank - a.level_rank || (b.latest_observation_at ?? "").localeCompare(a.latest_observation_at ?? "");
-}
-
-/** The active trackers at the chosen level (null for all), in the chosen order. */
-export function arrange(trackers: Tracker[], sort: SortBy, level: string | null): Tracker[] {
-  const shown = trackers.filter((tracker) => tracker.status === "active" && (level === null || tracker.level === level));
+/** The active trackers at the chosen level (null for all), in the chosen order; with a lens, only the
+ * countries judged on it, read through that lens. */
+export function arrange(trackers: Tracker[], sort: SortBy, level: string | null, lens: string | null = null): Tracker[] {
+  const shown = trackers.filter((tracker) => tracker.status === "active"
+    && (lens === null || lensHeat(tracker, lens) !== null)
+    && (level === null || levelOf(tracker, lens).level === level));
+  const byLevel = (a: Tracker, b: Tracker): number =>
+    levelOf(b, lens).rank - levelOf(a, lens).rank || (b.latest_observation_at ?? "").localeCompare(a.latest_observation_at ?? "");
   const compare: Record<SortBy, (a: Tracker, b: Tracker) => number> = {
     level: byLevel,
     score: (a, b) => compareNullable(scoreOf(a), scoreOf(b)) || byLevel(a, b),

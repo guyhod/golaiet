@@ -50,7 +50,8 @@ p { margin: 0.3rem 0; line-height: 1.4; }
 
 main { flex: 1; padding: 1.2rem 1.4rem; }
 
-.controls { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+.controls { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+.controls .chips { margin-right: auto; }
 .chips { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 .chip { padding: 0.2rem 0.7rem; border: 1px solid var(--line); border-radius: 1rem; color: var(--muted); font-size: 0.9rem; }
 .chip.on { color: var(--text); border-color: var(--level-colour, var(--text)); }

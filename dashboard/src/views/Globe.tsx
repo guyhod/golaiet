@@ -4,48 +4,12 @@ import type { Tracker, TrackerDetail } from "../api";
 import { arrowOf, getJson, formatWhen, hostOf } from "../api";
 import type { ViewProps } from "./index";
 import { boundsOfCountry } from "./globe/countries";
+import { countryState, HEAT_RANK, LEGEND, LENSES, lensRanks, TREND_LEGEND, type Lens } from "./country";
 import { createMap, fillLayerId, fitWorld, flyToCountry, paint, select, type ColourBy } from "./globe/createMap";
 
 const REFRESH_MS = 60_000;
 
-/** A country tracker's assessment state, as the country_risk kind records it. */
-type Lens = { heat: string; summary: string; detail: string; latest_event?: string | null; source_urls: string[]; held_until?: string };
-type CountryState = {
-  level: string; peace_score: number; peace_score_reason: string; overview: string; outlook: string;
-  // Absent on records judged before 2026-10-28, which filed a conflict list instead; they stand until the next run.
-  lenses?: Record<string, Lens>; trend?: string; peace_score_change?: number;
-};
-
-// Copies LENSES in core/kinds/country_risk.py: the six things judged for every
-// country, in the record's order. Change them together.
-export const LENSES: [key: string, word: string][] = [
-  ["security", "security"],
-  ["internal_stability", "internal stability"],
-  ["political_stability", "political stability"],
-  ["antisemitism", "antisemitism"],
-  ["islam", "Islam"],
-  ["migration", "migration"],
-];
-
-// Copies HEAT_DEFINITIONS in core/kinds/country_risk.py: the legend has to say
-// what the agent was told each heat means. Change them together.
-const LEGEND: [rank: number, word: string, meaning: string][] = [
-  [4, "hot", "organized violence in the last 30 days, or imminent"],
-  [3, "warm", "violence with casualties in the last 12 months, or active mobilization"],
-  [2, "cold", "tension without violence in the last 12 months"],
-  [1, "dormant", "frozen or historic, no activity in over a year, could reignite"],
-  [0, "calm", "nothing of the kind in the last 12 months"],
-  [-1, "no data", "no tracker for this country"],
-];
-// Copies TREND_STEP in core/kinds/country_risk.py: a trend is the peace score
-// against the previous judgment, five points either way. Change them together.
-const TREND_LEGEND: [word: string, meaning: string][] = [
-  ["improving", "peace score up 5 or more since the previous judgment"],
-  ["stable", "within 5 points"],
-  ["worsening", "down 5 or more"],
-  ["none", "one judgment so far, or no tracker"],
-];
-const COLOUR_BY: [ColourBy, string][] = [["level", "hottest conflict"], ["score", "peace score"], ["trend", "trend"]];
+const COLOUR_BY: [ColourBy, string][] = [["level", "hottest lens"], ["score", "peace score"], ["trend", "trend"]];
 
 /** The globe painted by every country tracker's level, with one country's record beside it. */
 export function Globe({ slug, onClose }: ViewProps) {
@@ -100,8 +64,9 @@ export function Globe({ slug, onClose }: ViewProps) {
     if (!map) return;
     paint(map, countries.map((country) => ({
       numeric: String(country.subject.numeric), level_rank: country.level_rank,
-      peace_score: (country.latest_assessment?.state as CountryState | undefined)?.peace_score ?? null,
-      trend: (country.latest_assessment?.state as CountryState | undefined)?.trend ?? null,
+      peace_score: countryState(country)?.peace_score ?? null,
+      trend: countryState(country)?.trend ?? null,
+      lens_ranks: lensRanks(country),
     })), colourBy);
   }, [map, countries, colourBy]);
 
@@ -129,7 +94,7 @@ export function Globe({ slug, onClose }: ViewProps) {
     if (bounds) flyToCountry(map, bounds);
   }, [map, detail]);
 
-  const state = detail?.latest_assessment?.state as CountryState | undefined;
+  const state = detail ? countryState(detail) : undefined;
 
   return (
     <div className="globe">
@@ -143,7 +108,14 @@ export function Globe({ slug, onClose }: ViewProps) {
               </button>
             ))}
           </div>
-          {colourBy === "level" ? (
+          <div className="colour-by" role="radiogroup" aria-label="colour by lens">
+            {LENSES.map(([key, word]) => (
+              <button key={key} role="radio" aria-checked={colourBy === `lens:${key}`} className={colourBy === `lens:${key}` ? "on" : ""} onClick={() => setColourBy(`lens:${key}`)}>
+                {word}
+              </button>
+            ))}
+          </div>
+          {colourBy === "level" || colourBy.startsWith("lens:") ? (
             <ul>
               {LEGEND.map(([rank, word, meaning]) => (
                 <li key={word} className={`lvl-${rank}`}><span className="swatch" />{word} <span className="muted">{meaning}</span></li>
@@ -213,8 +185,6 @@ export function Globe({ slug, onClose }: ViewProps) {
     </div>
   );
 }
-
-const HEAT_RANK: Record<string, number> = { calm: 0, dormant: 1, cold: 2, warm: 3, hot: 4 };
 
 function LensCard({ word, lens }: { word: string; lens: Lens }) {
   const [open, setOpen] = useState(false);

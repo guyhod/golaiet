@@ -1,13 +1,15 @@
 import { useState } from "react";
 import type { Tracker } from "../api";
 import { arrowOf, formatWhen } from "../api";
-import { arrange, levelsOf, SORTS, trendOf, type SortBy } from "./overview/arrange";
+import { LENSES } from "./country";
+import { arrange, levelOf, levelsOf, SORTS, trendOf, type SortBy } from "./overview/arrange";
 
-/** Every active tracker as a tile; chips pick a level, the control picks the order. */
+/** Every active tracker as a tile; chips pick a level, the controls pick the order and the lens the level is read through. */
 export function Overview({ trackers, onOpen }: { trackers: Tracker[]; onOpen: (tracker: Tracker) => void }) {
   const [sort, setSort] = useState<SortBy>("level");
   const [level, setLevel] = useState<string | null>(null);
-  const shown = arrange(trackers, sort, level);
+  const [lens, setLens] = useState<string | null>(null);
+  const shown = arrange(trackers, sort, level, lens);
   if (!trackers.some((tracker) => tracker.status === "active")) {
     return <p className="empty">Nothing is tracked yet. Say “track …” in Telegram.</p>;
   }
@@ -16,12 +18,19 @@ export function Overview({ trackers, onOpen }: { trackers: Tracker[]; onOpen: (t
       <div className="controls">
         <div className="chips" role="radiogroup" aria-label="level">
           <button role="radio" aria-checked={level === null} className={`chip${level === null ? " on" : ""}`} onClick={() => setLevel(null)}>all</button>
-          {levelsOf(trackers).map(({ level: word, rank }) => (
+          {levelsOf(trackers, lens).map(({ level: word, rank }) => (
             <button key={word} role="radio" aria-checked={level === word} className={`chip lvl-${rank}${level === word ? " on" : ""}`} onClick={() => setLevel(word)}>
               {word}
             </button>
           ))}
         </div>
+        <label className="muted">
+          lens{" "}
+          <select value={lens ?? ""} onChange={(event) => { setLens(event.target.value || null); setLevel(null); }}>
+            <option value="">whole country</option>
+            {LENSES.map(([key, word]) => <option key={key} value={key}>{word}</option>)}
+          </select>
+        </label>
         <label className="muted">
           order{" "}
           <select value={sort} onChange={(event) => setSort(event.target.value as SortBy)}>
@@ -29,15 +38,16 @@ export function Overview({ trackers, onOpen }: { trackers: Tracker[]; onOpen: (t
           </select>
         </label>
       </div>
-      {!shown.length && <p className="empty">No tracker at this level.</p>}
+      {!shown.length && <p className="empty">{lens ? "No country judged on this lens yet." : "No tracker at this level."}</p>}
       <div className="tiles">
         {shown.map((tracker) => {
           const trend = trendOf(tracker);
+          const shownLevel = levelOf(tracker, lens);
           return (
-            <button key={tracker.slug} className={`tile lvl-${tracker.level_rank}`} onClick={() => onOpen(tracker)}>
+            <button key={tracker.slug} className={`tile lvl-${shownLevel.rank}`} onClick={() => onOpen(tracker)}>
               <div className="tile-head">
                 <span>
-                  <span className="level">{tracker.level ?? "unjudged"}</span>
+                  <span className="level">{shownLevel.level ?? "unjudged"}</span>
                   {trend && <span className={`trend trend-${trend.word}`}> {arrowOf(trend.word)} {trend.change > 0 ? "+" : ""}{trend.change}</span>}
                 </span>
                 <span className="muted">{tracker.kind}</span>
