@@ -15,14 +15,15 @@ ALLOWED_TOOLS = ["mcp__golaiet__record_observation", "mcp__golaiet__record_asses
 TOOLS = ["WebSearch", "WebFetch"]
 
 
-def run(job, run) -> dict:
+def run(job, run, lens: str | None = None) -> dict:
+    """`lens` (off schedule, from manage.py research) narrows the session to one lens studied in depth."""
     tracker: Tracker = job.tracker
     if tracker is None:
         raise ValueError(f"research job {job.name} has no tracker")
     if tracker.status != Tracker.Status.ACTIVE:
         return {"summary": f"skipped: tracker is {tracker.status}"}
     previous = tracker.assessments.order_by("-at").first()
-    prompt = kinds.get(tracker.kind).research_prompt(tracker, previous)
+    prompt = kinds.get(tracker.kind).research_prompt(tracker, previous, lens)
     result = ClaudeRunner().run(prompt, system_prompt=RESEARCH_SYSTEM_PROMPT, allowed_tools=ALLOWED_TOOLS,
                                 tools=TOOLS, env={"GOLAIET_JOB_RUN_ID": run.pk})
     filed = Observation.objects.filter(job_run=run).count()

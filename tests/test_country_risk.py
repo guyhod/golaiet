@@ -3,9 +3,13 @@ from types import SimpleNamespace
 
 import pytest
 
+from django.core.management import call_command
+
 from agent import tools
+from agent.flows import research
+from agent.runner import AgentResult
 from core.kinds import country_risk
-from scheduler.models import Job
+from scheduler.models import Job, JobRun
 
 CALM = {"heat": "calm", "summary": "Nothing of the kind.", "detail": "Detail.", "latest_event": None,
         "source_urls": ["https://reuters.example/calm"]}
@@ -72,6 +76,11 @@ def test_the_prompt_names_the_lenses_and_the_heats_on_file():
     prompt = country_risk.research_prompt(tracker, previous)
     assert "- islam:" in prompt and "- antisemitism:" in prompt
     assert "internal_stability: hot since 2026-10-17" in prompt and "stale index" in prompt
+    study = country_risk.research_prompt(tracker, previous, lens="antisemitism")
+    assert "studies one lens in depth, antisemitism:" in study and "Six lenses" not in study
+    assert '"internal_stability": {' in study and "Riots in several cities." in study and "the antisemitism heat" in study
+    with pytest.raises(ValueError, match="research the whole country first"):
+        country_risk.research_prompt(tracker, None, lens="antisemitism")
 
 
 @pytest.mark.django_db
@@ -94,3 +103,25 @@ def test_country_tracker_gets_a_research_job_and_alerts_on_heat(monkeypatch):
     assert second["state"] == {**second["state"], "level": "warm", "trend": "improving", "peace_score_change": 6}
     assert second["alert"]["text"].startswith("Israel: hot → warm.")
     assert tools.get_tracker("isr")["latest_assessment"]["state"]["peace_score_change"] == 6
+
+
+@pytest.mark.django_db
+def test_the_research_command_runs_one_lens_study_now(monkeypatch, capsys):
+    monkeypatch.setenv("GOLAIET_MESSAGE_ID", "")
+    monkeypatch.setenv("GOLAIET_JOB_RUN_ID", "")
+    tools.create_tracker("prt", "Portugal", "country_risk", {"iso3": "prt"}, "Guy may move here.", "weekly")
+    tools.record_assessment("prt", {**record(), "peace_score": 90}, "Quiet.", [])
+    prompts = []
+
+    def run(self, prompt, **kwargs):
+        prompts.append(prompt)
+        monkeypatch.setenv("GOLAIET_JOB_RUN_ID", str(kwargs["env"]["GOLAIET_JOB_RUN_ID"]))
+        warm = {**HOT, "heat": "warm", "summary": "Threats at Coimbra.", "latest_event": date.today().isoformat()}
+        tools.record_assessment("prt", {**record(antisemitism=warm), "peace_score": 84}, "Threats.", [])
+        return AgentResult(text="antisemitism warm", session_id="s-1", cost_usd=None)
+    monkeypatch.setattr(research.ClaudeRunner, "run", run)
+    call_command("research", "prt", "--lens", "antisemitism")
+    assert "studies one lens in depth, antisemitism" in prompts[0]
+    assert JobRun.objects.get().status == JobRun.Status.DONE
+    out = capsys.readouterr().out
+    assert "Portugal: warm, peace score 84" in out and "antisemitism: warm" in out and "security:" not in out

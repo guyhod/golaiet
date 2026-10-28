@@ -9,6 +9,7 @@ was filed cold while Paris rioted, because the one search on unrest came back
 stale and "found nothing" was accepted as calm. Every lens needs a page
 opened in the last 30 days, calm included. The level is the hottest lens,
 derived here and never asked of the agent."""
+import json
 from datetime import date, timedelta
 
 import pycountry
@@ -201,7 +202,12 @@ def validate_state(state: dict, previous=None, test_today: date | None = None) -
 alert_for = level_change_alert
 
 
-def research_prompt(tracker, previous) -> str:
+def research_prompt(tracker, previous, lens: str | None = None) -> str:
+    """The weekly brief judges all six lenses in one pass of at most MAX_SEARCHES
+    searches, about two per lens; `lens` turns the run into a study of that one
+    lens with every search spent on it, the other five carried over from the
+    record on file. Guy asked for the first on 2026-10-28, Portugal on
+    antisemitism, which the pass had judged on a single page."""
     name, iso3 = tracker.subject["name"], tracker.subject["iso3"]
     heat_lines = "\n".join(f"- {heat}: {definition}" for heat, definition in HEAT_DEFINITIONS.items())
     lens_lines = "\n".join(f"- {key}: {definition}" for key, definition in LENSES.items())
@@ -214,13 +220,27 @@ def research_prompt(tracker, previous) -> str:
             previous_line += "\nHeats on file that only come down " + f"{HOLD_DAYS} days after their latest event: " + "; ".join(held)
     else:
         previous_line = "No previous judgment: this is the first."
+    if lens is None:
+        lens_brief = f"Six lenses, every one judged every run:\n{lens_lines}"
+        search_brief = (f"Search the web for the latest, at most {MAX_SEARCHES} searches: at least one per lens, naming the "
+                        "country and the lens's subject.")
+    else:
+        if lens not in LENSES:
+            raise ValueError(f"lens must be one of {', '.join(LENSES)}")
+        if not previous or not previous.state.get("lenses"):
+            raise ValueError("a lens study needs a record with lenses on file: research the whole country first")
+        others = {key: value for key, value in previous.state["lenses"].items() if key != lens}
+        lens_brief = (f"This run studies one lens in depth, {lens}: {LENSES[lens]}. The other five lenses are not researched: "
+                      "put them in the state exactly as on file, which is\n" + json.dumps(others, indent=1))
+        search_brief = (f"Search the web for the latest, up to {MAX_SEARCHES} searches, all on {lens} in {name} from different "
+                        "angles: incidents of the last 30 days and of the last 12 months, community and watchdog reports, "
+                        "official statistics, and the state's response (police, prosecutors, courts, government).")
     return "\n\n".join([
         f"Research {name} ({iso3}) for the tracker \"{tracker.title}\" (slug: {tracker.slug}).",
         f"Standing brief:\n{tracker.brief}",
         previous_line,
-        f"Six lenses, every one judged every run:\n{lens_lines}",
-        f"Search the web for the latest, at most {MAX_SEARCHES} searches: at least one per lens, naming the country and the lens's "
-        "subject. A search whose results are all older than 30 days is not a finding, it is a stale index: search that lens "
+        lens_brief,
+        search_brief + " A search whose results are all older than 30 days is not a finding, it is a stale index: search "
         "again with different words in extended mode before concluding anything. Open the page a heat rests on; a calm lens "
         "needs an opened page from the last 30 days that covers the subject and shows nothing happening. Prefer primary and "
         "reputable sources (governments, UN agencies, International Crisis Group, ACLED, Reuters, AP, major national press). "
@@ -246,5 +266,7 @@ def research_prompt(tracker, previous) -> str:
         f"until {HOLD_DAYS} days after its latest event, whatever this run finds.",
         f"Heats (how violent the lens is right now):\n{heat_lines}",
         PEACE_SCORE_RUBRIC,
-        "Finish with one line: the peace score, the level, and the change since the previous judgment in a few words.",
+        ("Finish with one line: the peace score, the level, and the change since the previous judgment in a few words."
+         if lens is None else f"Refresh the peace score, its reason, the overview and the outlook only where {lens} changes "
+         f"them. Finish with one line: the {lens} heat and what changed since the record on file."),
     ])

@@ -49,6 +49,7 @@ make logs
 # Host dev instead (stop the compose scheduler first: two pollers on one bot conflict)
 make up && make migrate          # Postgres on 5435, then the schema
 ./.venv/bin/python manage.py seed_jobs
+./.venv/bin/python manage.py research prt --lens antisemitism   # one country now; --lens studies one lens in depth
 make scheduler                   # job loop + Telegram poller
 make run                         # Django admin + API on 8003
 make dashboard-dev               # Vite on 5174, /api proxied to 8003
