@@ -66,4 +66,8 @@ test("track a stock with a line opens the price view", async ({ page }) => {
   await expect(dialog).toContainText("good below 170.00");
   await expect(dialog).toContainText("No ticks yet");
   await expect(dialog.locator(".chart canvas")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.getByRole("tab", { name: "Stocks" }).click();
+  await expect(page.locator(".stock")).toContainText(["CEG"]);
+  await expect(page.locator(".stock")).toContainText("good below 170.00");
 });

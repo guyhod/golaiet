@@ -4,15 +4,16 @@ import type { Alert, Focus, Health, Tracker } from "./api";
 import { Module } from "./Module";
 import { Globe } from "./views/Globe";
 import { Overview } from "./views/Overview";
+import { Stocks } from "./views/Stocks";
 import { viewFor } from "./views";
 
-/** The screen is the globe (the default) or the list of tiles; the bar switches
- *  them. A country tracker opens on the globe, its kind's view; any other
- *  tracker opens in its own view as a module over the screen. A focus event
+/** The screen is the globe (the default), the stocks or the list of tiles; the
+ *  bar switches them. A country tracker opens on the globe, its kind's view;
+ *  any other tracker opens in its own view as a module over the screen. A focus event
  *  from a conversation opens or closes either, and so does a click on a tile. */
 export type Open = { slug: string; view: string; params: Record<string, unknown> } | null;
-type Screen = "globe" | "list";
-const SCREENS: [Screen, string][] = [["globe", "Globe"], ["list", "List"]];
+type Screen = "globe" | "stocks" | "list";
+const SCREENS: [Screen, string][] = [["globe", "Globe"], ["stocks", "Stocks"], ["list", "List"]];
 
 const REFRESH_MS = 60_000;
 const ALERT_BANNER_HOURS = 24;
@@ -114,6 +115,8 @@ export function App() {
 
       {screen === "globe" ? (
         <main className="full"><Globe shown={picked} onShow={setPicked} /></main>
+      ) : screen === "stocks" ? (
+        <main><Stocks trackers={trackers} onOpen={(tracker) => show(tracker.slug, tracker.view, {})} /></main>
       ) : (
         <main><Overview trackers={trackers} onOpen={(tracker) => show(tracker.slug, tracker.view, {})} /></main>
       )}
