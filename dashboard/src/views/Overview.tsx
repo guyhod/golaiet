@@ -4,7 +4,8 @@ import { arrowOf, formatWhen } from "../api";
 import { LENSES } from "./country";
 import { arrange, levelOf, levelsOf, SORTS, trendOf, TRENDS, type SortBy } from "./overview/arrange";
 
-/** Every active tracker as a tile; chips pick a level and a trend, the controls pick the order and the lens the level is read through. */
+/** Every active tracker as a tile; chips pick a level and a trend (a second click clears the chip), the controls pick the order
+ * and the lens the level is read through. */
 export function Overview({ trackers, onOpen }: { trackers: Tracker[]; onOpen: (tracker: Tracker) => void }) {
   const [sort, setSort] = useState<SortBy>("level");
   const [level, setLevel] = useState<string | null>(null);
@@ -20,7 +21,7 @@ export function Overview({ trackers, onOpen }: { trackers: Tracker[]; onOpen: (t
         <div className="chips" role="radiogroup" aria-label="level">
           <button role="radio" aria-checked={level === null} className={`chip${level === null ? " on" : ""}`} onClick={() => setLevel(null)}>all</button>
           {levelsOf(trackers, lens).map(({ level: word, rank }) => (
-            <button key={word} role="radio" aria-checked={level === word} className={`chip lvl-${rank}${level === word ? " on" : ""}`} onClick={() => setLevel(word)}>
+            <button key={word} role="radio" aria-checked={level === word} className={`chip lvl-${rank}${level === word ? " on" : ""}`} onClick={() => setLevel(level === word ? null : word)}>
               {word}
             </button>
           ))}
@@ -28,7 +29,7 @@ export function Overview({ trackers, onOpen }: { trackers: Tracker[]; onOpen: (t
         <div className="chips" role="radiogroup" aria-label="trend">
           <button role="radio" aria-checked={trend === null} className={`chip${trend === null ? " on" : ""}`} onClick={() => setTrend(null)}>any trend</button>
           {TRENDS.map((word) => (
-            <button key={word} role="radio" aria-checked={trend === word} className={`chip trend-${word}${trend === word ? " on" : ""}`} onClick={() => setTrend(word)}>
+            <button key={word} role="radio" aria-checked={trend === word} className={`chip trend-${word}${trend === word ? " on" : ""}`} onClick={() => setTrend(trend === word ? null : word)}>
               {arrowOf(word)} {word}
             </button>
           ))}
