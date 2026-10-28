@@ -3,7 +3,7 @@
 // together with the kind.
 import type { Tracker } from "../api";
 
-export type Lens = { heat: string; summary: string; detail: string; latest_event?: string | null; source_urls: string[]; held_until?: string };
+export type Lens = { heat: string; summary: string; detail: string; latest_event?: string | null; source_urls: string[]; held_until?: string; muslim_share?: number };
 export type CountryState = {
   level: string; peace_score: number; peace_score_reason: string; overview: string; outlook: string;
   // Absent on records judged before 2026-10-28, which filed a conflict list instead; they stand until the next run.

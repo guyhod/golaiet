@@ -54,6 +54,11 @@ def test_every_lens_is_judged_and_sourced():
         country_risk.validate_state({**record(), "level": "hot"})
     with pytest.raises(ValueError, match="heat must be one of"):
         country_risk.validate_state(record(security={**HOT, "heat": "boiling"}))
+    with pytest.raises(ValueError, match="muslim_share belongs to the islam lens only"):
+        country_risk.validate_state(record(security={**CALM, "muslim_share": 6}))
+    with pytest.raises(ValueError, match="percent of the population, 0 to 100, got 120"):
+        country_risk.validate_state(record(islam={**CALM, "muslim_share": 120}))
+    assert country_risk.validate_state(record(islam={**CALM, "muslim_share": 6.5}))["lenses"]["islam"]["muslim_share"] == 6.5
 
 
 def test_a_heat_holds_for_thirty_days_after_its_latest_event():
@@ -75,6 +80,7 @@ def test_the_prompt_names_the_lenses_and_the_heats_on_file():
                                state={"peace_score": 70, "peace_score_reason": "Riots.", "lenses": record(internal_stability=dict(HOT))["lenses"]})
     prompt = country_risk.research_prompt(tracker, previous)
     assert "- islam:" in prompt and "- antisemitism:" in prompt
+    assert "muslim_share" in prompt
     assert "internal_stability: hot since 2026-10-17" in prompt and "stale index" in prompt
     study = country_risk.research_prompt(tracker, previous, lens="antisemitism")
     assert "studies one lens in depth, antisemitism:" in study and "Six lenses" not in study

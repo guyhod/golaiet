@@ -90,6 +90,7 @@ LENS_SCHEMA = {
     "latest_event": (str, False),        # YYYY-MM-DD of the latest event the heat rests on; required for warm and hot
     "source_urls": (list, True),
     "held_until": (str, False),          # derived: the day the previous heat may come down
+    "muslim_share": (float, False),      # islam only: percent of the population that is Muslim
 }
 # Longer text is rejected, not cut: the prompt states the limits, so it is the agent breaking them.
 TEXT_LIMITS = {"summary": 300, "peace_score_reason": 300}
@@ -129,9 +130,16 @@ def _day(value: str, label: str) -> date:
         raise ValueError(f"{label} must be a YYYY-MM-DD date, got {value!r}") from None
 
 
-def validate_lens(lens: dict, label: str) -> dict:
+def validate_lens(lens: dict, key: str, label: str) -> dict:
     validate(lens, LENS_SCHEMA, label)
     _limited(lens, label)
+    share = lens.get("muslim_share")
+    if key != "islam" and share is not None:
+        raise ValueError(f"{label}.muslim_share belongs to the islam lens only")
+    # Absent on islam lenses judged before 2026-10-28 and on a lens study that copies one such lens as on file;
+    # the next judgment of the islam lens fills it.
+    if share is not None and not 0 <= share <= 100:
+        raise ValueError(f"{label}.muslim_share is a percent of the population, 0 to 100, got {share}")
     if lens["heat"] not in HEAT_DEFINITIONS:
         raise ValueError(f"{label}.heat must be one of {', '.join(HEAT_DEFINITIONS)}, got {lens['heat']!r}")
     for text_field in ("summary", "detail"):
@@ -183,7 +191,7 @@ def validate_state(state: dict, previous=None, test_today: date | None = None) -
     today = test_today or timezone.localdate()
     previous_lenses = (previous.state.get("lenses") or {}) if previous is not None else {}
     for key in LENSES:
-        lens = validate_lens(state["lenses"][key], f"state.lenses.{key}")
+        lens = validate_lens(state["lenses"][key], key, f"state.lenses.{key}")
         state["lenses"][key] = _hold(lens, previous_lenses.get(key), today)
     level = max((lens["heat"] for lens in state["lenses"].values()), key=LEVELS.index)
     if state.get("level") not in (None, level):
@@ -259,7 +267,9 @@ def research_prompt(tracker, previous, lens: str | None = None) -> str:
         "    \"heat\": <one of the heats below>, \"summary\": \"one sentence, max 300 characters\",\n"
         "    \"detail\": \"1-3 paragraphs: what is happening, why, what changed recently\",\n"
         "    \"latest_event\": \"YYYY-MM-DD of the latest event the heat rests on; required for warm and hot, null when nothing dated\",\n"
-        "    \"source_urls\": [\"https://... pages you opened\"]\n"
+        "    \"source_urls\": [\"https://... pages you opened\"],\n"
+        "    \"muslim_share\": <islam lens only: percent of the population that is Muslim, from a census, statistics "
+        "office or Pew page you opened and filed>\n"
         "  } }\n"
         "}\n"
         "Do not set level: it is derived from the hottest lens. Do not set held_until: the judge keeps a warm or hot heat "

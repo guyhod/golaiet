@@ -195,6 +195,7 @@ function LensCard({ word, lens }: { word: string; lens: Lens }) {
         <span className="level">{lens.heat}</span>
         {lens.latest_event && <> · latest event {lens.latest_event}</>}
         {lens.held_until && <span className="muted"> · held until {lens.held_until}</span>}
+        {lens.muslim_share != null && <> · Muslims {lens.muslim_share}% of the population</>}
       </div>
       <p className="small">{lens.summary}</p>
       {open && (
