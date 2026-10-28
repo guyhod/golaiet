@@ -1,17 +1,22 @@
+from datetime import date, timedelta
+from types import SimpleNamespace
+
 import pytest
 
 from agent import tools
 from core.kinds import country_risk
 from scheduler.models import Job
 
-CONFLICT = {
-    "title": "Northern front with Hezbollah", "kind": "war", "scope": "external", "heat": "warm",
-    "summary": "Exchanges of fire continue along the border.", "detail": "Detail.", "parties": ["Israel", "Hezbollah"],
-    "since": "2023-10-08", "place": {"name": "Galilee", "kind": "area", "latitude": 33.0, "longitude": 35.4},
-    "counterpart_iso3": "lbn", "source_urls": ["https://reuters.example/a"],
-}
-RECORD = {"peace_score": 35, "peace_score_reason": "Several active fronts.", "overview": "Over.", "outlook": "Out.",
-          "conflicts": [CONFLICT, {**CONFLICT, "title": "Gaza", "heat": "hot", "place": None, "counterpart_iso3": None}]}
+CALM = {"heat": "calm", "summary": "Nothing of the kind.", "detail": "Detail.", "latest_event": None,
+        "source_urls": ["https://reuters.example/calm"]}
+HOT = {"heat": "hot", "summary": "Riots in several cities.", "detail": "Detail.", "latest_event": "2026-10-17",
+       "source_urls": ["https://reuters.example/riots"]}
+LENSES = {key: dict(CALM) for key in country_risk.LENSES}
+RECORD = {"peace_score": 35, "peace_score_reason": "Riots.", "overview": "Over.", "outlook": "Out.", "lenses": LENSES}
+
+
+def record(**lenses):
+    return {**RECORD, "lenses": {**{key: dict(CALM) for key in country_risk.LENSES}, **lenses}}
 
 
 def test_subject_is_filled_from_the_iso_list():
@@ -20,22 +25,53 @@ def test_subject_is_filled_from_the_iso_list():
         country_risk.validate_subject({"iso3": "ZZZ"})
 
 
-def test_state_derives_level_and_trend_and_rejects_unsourced():
-    from types import SimpleNamespace
-    state = country_risk.validate_state({**RECORD, "conflicts": [dict(c) for c in RECORD["conflicts"]]})
+def test_state_derives_level_and_trend_from_the_lenses():
+    state = country_risk.validate_state(record(internal_stability=dict(HOT)))
     assert state["level"] == "hot" and "trend" not in state
-    assert state["conflicts"][0]["counterpart_iso3"] == "LBN"
     previous = SimpleNamespace(state={"peace_score": 42}, level="warm")
-    again = country_risk.validate_state({**RECORD, "conflicts": []}, previous)
+    again = country_risk.validate_state(record(), previous)
     assert again["level"] == "calm" and again["trend"] == "worsening" and again["peace_score_change"] == -7
-    with pytest.raises(ValueError, match=r"conflicts\[0\].source_urls needs at least one"):
-        country_risk.validate_state({**RECORD, "conflicts": [{**CONFLICT, "source_urls": []}]})
+
+
+def test_every_lens_is_judged_and_sourced():
+    with pytest.raises(ValueError, match="missing antisemitism, islam"):
+        country_risk.validate_state({**RECORD, "lenses": {k: dict(CALM) for k in country_risk.LENSES if k not in ("antisemitism", "islam")}})
+    with pytest.raises(ValueError, match="unknown crime"):
+        country_risk.validate_state(record(crime=dict(CALM)))
+    with pytest.raises(ValueError, match=r"lenses.migration.source_urls needs at least one"):
+        country_risk.validate_state(record(migration={**CALM, "source_urls": []}))
+    with pytest.raises(ValueError, match="latest_event is required when the heat is hot"):
+        country_risk.validate_state(record(security={**HOT, "latest_event": None}))
+    with pytest.raises(ValueError, match="latest_event must be a YYYY-MM-DD"):
+        country_risk.validate_state(record(security={**HOT, "latest_event": "October 17"}))
+    with pytest.raises(ValueError, match="held_until is derived"):
+        country_risk.validate_state(record(security={**HOT, "held_until": "2026-11-16"}))
     with pytest.raises(ValueError, match="level is derived"):
-        country_risk.validate_state({**RECORD, "level": "calm", "conflicts": [dict(CONFLICT)]})
-    with pytest.raises(ValueError, match="peace_score must be 0 to 100"):
-        country_risk.validate_state({**RECORD, "peace_score": 101, "conflicts": []})
+        country_risk.validate_state({**record(), "level": "hot"})
     with pytest.raises(ValueError, match="heat must be one of"):
-        country_risk.validate_state({**RECORD, "conflicts": [{**CONFLICT, "heat": "boiling"}]})
+        country_risk.validate_state(record(security={**HOT, "heat": "boiling"}))
+
+
+def test_a_heat_holds_for_thirty_days_after_its_latest_event():
+    previous = SimpleNamespace(state={"peace_score": 35, "lenses": record(internal_stability=dict(HOT))["lenses"]}, level="hot")
+    cooled = {**CALM, "heat": "cold", "summary": "No riots found this week."}
+    held = country_risk.validate_state(record(internal_stability=dict(cooled)), previous, test_today=date(2026, 10, 26))
+    lens = held["lenses"]["internal_stability"]
+    assert lens["heat"] == "hot" and lens["latest_event"] == "2026-10-17" and lens["held_until"] == "2026-11-16"
+    assert lens["summary"] == "No riots found this week." and held["level"] == "hot"
+    released = country_risk.validate_state(record(internal_stability=dict(cooled)), previous, test_today=date(2026, 11, 16))
+    assert released["lenses"]["internal_stability"]["heat"] == "cold" and "held_until" not in released["lenses"]["internal_stability"]
+    hotter = country_risk.validate_state(record(internal_stability={**HOT, "latest_event": "2026-10-24"}), previous, test_today=date(2026, 10, 26))
+    assert hotter["lenses"]["internal_stability"]["latest_event"] == "2026-10-24"
+
+
+def test_the_prompt_names_the_lenses_and_the_heats_on_file():
+    tracker = SimpleNamespace(subject={"name": "France", "iso3": "FRA"}, title="France", slug="fra", brief="Riots.")
+    previous = SimpleNamespace(at=date(2026, 10, 26), level="hot",
+                               state={"peace_score": 70, "peace_score_reason": "Riots.", "lenses": record(internal_stability=dict(HOT))["lenses"]})
+    prompt = country_risk.research_prompt(tracker, previous)
+    assert "- islam:" in prompt and "- antisemitism:" in prompt
+    assert "internal_stability: hot since 2026-10-17" in prompt and "stale index" in prompt
 
 
 @pytest.mark.django_db
@@ -49,9 +85,12 @@ def test_country_tracker_gets_a_research_job_and_alerts_on_heat(monkeypatch):
     tools.update_tracker("isr", cadence="daily")
     assert Job.objects.get(name="assess:isr").schedule == "0 7 * * *"
     source = tools.record_observation("isr", "2026-10-09", "https://reuters.example/a", "Border fire.", {"title": "Reuters"})
-    first = tools.record_assessment("isr", {**RECORD, "conflicts": [dict(c) for c in RECORD["conflicts"]]}, "Several fronts.", [source["id"]])
+    # Hot on an event older than the hold window, so the second judgment may cool it.
+    old_fire = {**HOT, "latest_event": (date.today() - timedelta(days=country_risk.HOLD_DAYS + 1)).isoformat()}
+    first = tools.record_assessment("isr", record(security=old_fire), "Several fronts.", [source["id"]])
     assert first["state"]["level"] == "hot" and first["alert"]["text"].startswith("Israel: calm → hot.")
-    second = tools.record_assessment("isr", {**RECORD, "peace_score": 41, "conflicts": [dict(CONFLICT)]}, "Gaza quiet.", [])
+    warm = {**HOT, "heat": "warm", "latest_event": "2026-01-10"}
+    second = tools.record_assessment("isr", {**record(security=warm), "peace_score": 41}, "Front quiet.", [])
     assert second["state"] == {**second["state"], "level": "warm", "trend": "improving", "peace_score_change": 6}
     assert second["alert"]["text"].startswith("Israel: hot → warm.")
     assert tools.get_tracker("isr")["latest_assessment"]["state"]["peace_score_change"] == 6

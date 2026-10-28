@@ -9,15 +9,23 @@ import { createMap, fillLayerId, fitWorld, flyToCountry, paint, select, type Col
 const REFRESH_MS = 60_000;
 
 /** A country tracker's assessment state, as the country_risk kind records it. */
-type Conflict = {
-  title: string; kind: string; scope: string; heat: string; summary: string; detail: string; parties: string[];
-  since?: string; place?: { name: string; kind: string; latitude: number; longitude: number } | null;
-  counterpart_iso3?: string | null; source_urls: string[];
-};
+type Lens = { heat: string; summary: string; detail: string; latest_event?: string | null; source_urls: string[]; held_until?: string };
 type CountryState = {
   level: string; peace_score: number; peace_score_reason: string; overview: string; outlook: string;
-  conflicts: Conflict[]; trend?: string; peace_score_change?: number;
+  // Absent on records judged before 2026-10-28, which filed a conflict list instead; they stand until the next run.
+  lenses?: Record<string, Lens>; trend?: string; peace_score_change?: number;
 };
+
+// Copies LENSES in core/kinds/country_risk.py: the six things judged for every
+// country, in the record's order. Change them together.
+export const LENSES: [key: string, word: string][] = [
+  ["security", "security"],
+  ["internal_stability", "internal stability"],
+  ["political_stability", "political stability"],
+  ["antisemitism", "antisemitism"],
+  ["islam", "Islam"],
+  ["migration", "migration"],
+];
 
 // Copies HEAT_DEFINITIONS in core/kinds/country_risk.py: the legend has to say
 // what the agent was told each heat means. Change them together.
@@ -26,7 +34,7 @@ const LEGEND: [rank: number, word: string, meaning: string][] = [
   [3, "warm", "violence with casualties in the last 12 months, or active mobilization"],
   [2, "cold", "tension without violence in the last 12 months"],
   [1, "dormant", "frozen or historic, no activity in over a year, could reignite"],
-  [0, "calm", "researched, no conflicts"],
+  [0, "calm", "nothing of the kind in the last 12 months"],
   [-1, "no data", "no tracker for this country"],
 ];
 // Copies TREND_STEP in core/kinds/country_risk.py: a trend is the peace score
@@ -183,9 +191,10 @@ export function Globe({ slug, onClose }: ViewProps) {
             <section><span className="section-label">Overview</span><p>{state.overview}</p></section>
             <section><span className="section-label">Outlook · 12–24 months</span><p>{state.outlook}</p></section>
             <section>
-              <span className="section-label">Conflicts · {state.conflicts.length}</span>
-              {state.conflicts.map((conflict) => <ConflictCard key={conflict.title} conflict={conflict} byIso3={countries} />)}
-              {!state.conflicts.length && <p className="muted">No conflicts recorded.</p>}
+              <span className="section-label">Lenses</span>
+              {state.lenses
+                ? LENSES.map(([key, word]) => state.lenses![key] && <LensCard key={key} word={word} lens={state.lenses![key]} />)
+                : <p className="muted">Judged before the lenses; the next run fills them.</p>}
             </section>
             <section>
               <span className="section-label">Sources · {detail.recent_observations.length}</span>
@@ -207,27 +216,22 @@ export function Globe({ slug, onClose }: ViewProps) {
 
 const HEAT_RANK: Record<string, number> = { calm: 0, dormant: 1, cold: 2, warm: 3, hot: 4 };
 
-function ConflictCard({ conflict, byIso3 }: { conflict: Conflict; byIso3: Tracker[] }) {
+function LensCard({ word, lens }: { word: string; lens: Lens }) {
   const [open, setOpen] = useState(false);
-  const counterpart = byIso3.find((tracker) => tracker.subject.iso3 === conflict.counterpart_iso3)?.title ?? conflict.counterpart_iso3;
   return (
-    <article className={`conflict lvl-${HEAT_RANK[conflict.heat] ?? -1}`}>
-      <button className="conflict-title" onClick={() => setOpen(!open)}>{conflict.title}</button>
+    <article className={`lens lvl-${HEAT_RANK[lens.heat] ?? -1}`}>
+      <button className="lens-title" onClick={() => setOpen(!open)}>{word}</button>
       <div className="small">
-        <span className="level">{conflict.heat}</span> · {conflict.kind.replace("_", " ")} · {conflict.scope}
-        {conflict.place && <> · {conflict.place.name}</>}
+        <span className="level">{lens.heat}</span>
+        {lens.latest_event && <> · latest event {lens.latest_event}</>}
+        {lens.held_until && <span className="muted"> · held until {lens.held_until}</span>}
       </div>
-      <p className="small">{conflict.summary}</p>
+      <p className="small">{lens.summary}</p>
       {open && (
-        <div className="conflict-detail small">
-          <p>{conflict.detail}</p>
-          <p className="muted">
-            Parties: {conflict.parties.join(", ")}
-            {conflict.since && <> · since {conflict.since}</>}
-            {counterpart && <> · counterpart {counterpart}</>}
-          </p>
+        <div className="lens-detail small">
+          <p>{lens.detail}</p>
           <ul className="sources">
-            {conflict.source_urls.map((url) => <li key={url}><a href={url} target="_blank" rel="noreferrer">{hostOf(url)}</a></li>)}
+            {lens.source_urls.map((url) => <li key={url}><a href={url} target="_blank" rel="noreferrer">{hostOf(url)}</a></li>)}
           </ul>
         </div>
       )}

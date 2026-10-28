@@ -99,9 +99,9 @@ main { flex: 1; padding: 1.2rem 1.4rem; }
 .trend-stable { color: var(--muted); --heat-colour: var(--trend-stable); }
 .trend-worsening { color: var(--trend-worsening); --heat-colour: var(--trend-worsening); }
 .trend-none { --heat-colour: var(--trend-none); }
-.conflict { border-left: 0.3rem solid var(--heat-colour); background: var(--panel); border-radius: 0.3rem; padding: 0.6rem 0.9rem; margin: 0.5rem 0; }
-.conflict-title { font-weight: 600; font-size: 1rem; padding: 0; }
-.conflict-detail { border-top: 1px solid var(--line); margin-top: 0.4rem; padding-top: 0.4rem; }
+.lens { border-left: 0.3rem solid var(--heat-colour); background: var(--panel); border-radius: 0.3rem; padding: 0.6rem 0.9rem; margin: 0.5rem 0; }
+.lens-title { font-weight: 600; font-size: 1rem; padding: 0; }
+.lens-detail { border-top: 1px solid var(--line); margin-top: 0.4rem; padding-top: 0.4rem; }
 .sources { list-style: none; margin: 0; padding: 0; }
 .sources li { padding: 0.15rem 0; }
 
@@ -120,7 +120,7 @@ main { flex: 1; padding: 1.2rem 1.4rem; }
 .chip { display: inline-block; margin-left: 0.6rem; padding: 0 0.45rem; border: 1px solid var(--line); border-radius: 0.3rem; }
 
 /* Level colour by rank; -1 is a tracker nobody has judged yet. Tiles use the
-   four-step scale; the globe's legend and conflict cards use the five heats. */
+   four-step scale; the globe's legend and lens cards use the five heats. */
 .lvl--1 { --level-colour: var(--lvl-none); --heat-colour: var(--heat-none); }
 .lvl-0 { --level-colour: var(--lvl-0); --heat-colour: var(--heat-0); }
 .lvl-1 { --level-colour: var(--lvl-1); --heat-colour: var(--heat-1); }

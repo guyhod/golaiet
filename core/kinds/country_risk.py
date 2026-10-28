@@ -1,44 +1,53 @@
 """`country_risk`: one country's security and political situation, researched
 on the web by one session a week that files its sources as observations and
 one judgment as the assessment: a peace score with its reason, an overview, a
-12–24 month outlook, and the country's conflicts. Ported from the conflict map
-(geo_status_bashboard/research/country.py): same rubric, same heat and kind
-definitions, same validator. The level is the hottest conflict's heat, derived
-from the conflict list and never asked of the agent."""
+12–24 month outlook, and the six lenses. Ported from the conflict map
+(geo_status_bashboard/research/country.py): same rubric, same heat
+definitions. Where the port filed an open list of conflicts, the record now
+judges a fixed set of lenses every run: on 2026-10-24 and 2026-10-26 France
+was filed cold while Paris rioted, because the one search on unrest came back
+stale and "found nothing" was accepted as calm. Every lens needs a page
+opened in the last 30 days, calm included. The level is the hottest lens,
+derived here and never asked of the agent."""
+from datetime import date, timedelta
+
 import pycountry
+from django.utils import timezone
 
 from core.kinds import level_change_alert, validate
 
 VIEW = "globe"
 
-# Coolest first. calm is a researched country with no conflict at all.
+# Coolest first. calm is a lens with nothing of its kind in the last year.
 LEVELS = ("calm", "dormant", "cold", "warm", "hot")
 
 # The one definition of each heat. The research prompt renders this dict, so the
-# agent grades conflicts by exactly what is written here; the globe's legend
+# agent grades lenses by exactly what is written here; the globe's legend
 # (dashboard/src/views/Globe.tsx) copies these lines, change both together.
 HEAT_DEFINITIONS = {
     "hot": "organized violence in the last 30 days, or imminent",
     "warm": "violence with casualties in the last 12 months, or active mobilization",
     "cold": "tension without violence in the last 12 months",
     "dormant": "frozen or historic, no activity in over a year, could reignite",
+    "calm": "nothing of the kind in the last 12 months",
 }
 
-CONFLICT_KIND_DEFINITIONS = {
-    "war": "interstate or large-scale armed conflict",
-    "insurgency": "armed non-state groups against the state",
-    "terrorism": "violence against civilians by non-state groups, meant to spread fear",
-    "civil_unrest": "protests, riots, strikes",
-    "political": "constitutional crisis, power grabs, contested elections",
-    "sectarian": "religious, ethnic or communal rifts",
-    "diplomatic": "state-to-state tension without violence",
-    "crime": "organized or violent crime that shapes daily safety",
-    "economic": "sanctions, blockades, resource disputes",
+# What is judged for every country, every run. Rendered into the prompt; the
+# globe's lens switch and record copy the keys and words, change both together.
+LENSES = {
+    "security": "armed conflict, terrorism, insurgency, and standoffs with other states",
+    "internal_stability": "unrest on the street: protests, riots, strikes, violent crime, and the economy as it drives them",
+    "political_stability": "the government and institutions: censure, elections, constitutional crises, power grabs",
+    "antisemitism": "violence, intimidation and incidents against Jews, and the state's response",
+    "islam": "Islamist extremism and tension around Islam: radicalization, violence or intimidation in its name, "
+             "friction with Jews and the wider society, and the state's response",
+    "migration": "migration and integration: arrivals, camps, deportations, and violence or unrest around migrants",
 }
-SCOPES = ("internal", "external")
-PLACE_KINDS = ("city", "area")
-MAX_CONFLICTS = 12
-MAX_SEARCHES = 8
+
+# A heat comes down only once this long has passed since the latest event it
+# rested on: a riot is not over because this week's search did not find it.
+HOLD_DAYS = 30
+MAX_SEARCHES = 14
 
 # A peace score move of this much or more between two judgments is a trend.
 TREND_STEP = 5
@@ -63,24 +72,26 @@ PAYLOAD_SCHEMA = {
 }
 
 STATE_SCHEMA = {
-    "level": (str, False),               # derived from the conflicts; a value that disagrees is an error
+    "level": (str, False),               # derived from the lenses; a value that disagrees is an error
     "peace_score": (int, True),
     "peace_score_reason": (str, True),
     "overview": (str, True),
     "outlook": (str, True),
-    "conflicts": (list, True),
+    "lenses": (dict, True),              # every key of LENSES, each a LENS_SCHEMA record
     "trend": (str, False),               # derived from the previous judgment's score
     "peace_score_change": (int, False),  # derived likewise
 }
 
-CONFLICT_SCHEMA = {
-    "title": (str, True), "kind": (str, True), "scope": (str, True), "heat": (str, True),
-    "summary": (str, True), "detail": (str, True), "parties": (list, True), "since": (str, False),
-    "place": (dict, False), "counterpart_iso3": (str, False), "source_urls": (list, True),
+LENS_SCHEMA = {
+    "heat": (str, True),
+    "summary": (str, True),
+    "detail": (str, True),
+    "latest_event": (str, False),        # YYYY-MM-DD of the latest event the heat rests on; required for warm and hot
+    "source_urls": (list, True),
+    "held_until": (str, False),          # derived: the day the previous heat may come down
 }
-PLACE_SCHEMA = {"name": (str, True), "kind": (str, True), "latitude": (float, True), "longitude": (float, True)}
 # Longer text is rejected, not cut: the prompt states the limits, so it is the agent breaking them.
-TEXT_LIMITS = {"title": 150, "summary": 300, "since": 20, "peace_score_reason": 300}
+TEXT_LIMITS = {"summary": 300, "peace_score_reason": 300}
 
 DEFAULT_JOBS = ({"kind": "assess", "target": "agent.flows.research.run"},)
 
@@ -110,42 +121,51 @@ def _limited(values: dict, label: str) -> None:
             raise ValueError(f"{label}.{field} must be at most {limit} characters, got {len(values[field])}")
 
 
-def _choice(values: dict, field: str, allowed, label: str) -> None:
-    if values[field] not in allowed:
-        raise ValueError(f"{label}.{field} must be one of {', '.join(allowed)}, got {values[field]!r}")
+def _day(value: str, label: str) -> date:
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        raise ValueError(f"{label} must be a YYYY-MM-DD date, got {value!r}") from None
 
 
-def validate_conflict(conflict: dict, label: str) -> dict:
-    validate(conflict, CONFLICT_SCHEMA, label)
-    _limited(conflict, label)
-    _choice(conflict, "kind", CONFLICT_KIND_DEFINITIONS, label)
-    _choice(conflict, "scope", SCOPES, label)
-    _choice(conflict, "heat", HEAT_DEFINITIONS, label)
-    for text_field in ("title", "summary", "detail"):
-        if not conflict[text_field].strip():
+def validate_lens(lens: dict, label: str) -> dict:
+    validate(lens, LENS_SCHEMA, label)
+    _limited(lens, label)
+    if lens["heat"] not in HEAT_DEFINITIONS:
+        raise ValueError(f"{label}.heat must be one of {', '.join(HEAT_DEFINITIONS)}, got {lens['heat']!r}")
+    for text_field in ("summary", "detail"):
+        if not lens[text_field].strip():
             raise ValueError(f"{label}.{text_field} must not be empty")
-    if not all(isinstance(party, str) for party in conflict["parties"]):
-        raise ValueError(f"{label}.parties must be a list of strings")
-    urls = conflict["source_urls"]
+    urls = lens["source_urls"]
     if not urls or not all(isinstance(url, str) and url.startswith(("http://", "https://")) for url in urls):
-        raise ValueError(f"{label}.source_urls needs at least one http(s) URL: an unsourced conflict is not kept")
-    place = conflict.get("place")
-    if place is not None:
-        validate(place, PLACE_SCHEMA, f"{label}.place")
-        _choice(place, "kind", PLACE_KINDS, f"{label}.place")
-        if not (-90 <= place["latitude"] <= 90 and -180 <= place["longitude"] <= 180):
-            raise ValueError(f"{label}.place coordinates are out of range")
-        if len(place["name"]) > 100:
-            raise ValueError(f"{label}.place.name must be at most 100 characters")
-    if conflict.get("counterpart_iso3"):
-        conflict["counterpart_iso3"] = country(conflict["counterpart_iso3"]).alpha_3
-    return conflict
+        raise ValueError(f"{label}.source_urls needs at least one http(s) URL you opened: calm is sourced like anything else")
+    if lens.get("latest_event") is not None:
+        _day(lens["latest_event"], f"{label}.latest_event")
+    elif lens["heat"] in ("warm", "hot"):
+        raise ValueError(f"{label}.latest_event is required when the heat is {lens['heat']}: the date of the latest event")
+    if "held_until" in lens:
+        raise ValueError(f"{label}.held_until is derived; leave it out")
+    return lens
 
 
-def validate_state(state: dict, previous=None) -> dict:
-    """Checks the record field by field, derives the level from the conflicts
-    and the trend from the previous judgment. Fails loudly on anything unsourced
-    or out of the rubric, so the agent can fix it and call again."""
+def _hold(lens: dict, previous_lens: dict | None, today: date) -> dict:
+    """Keeps the previous heat while its latest event is under HOLD_DAYS old."""
+    if not previous_lens or previous_lens.get("latest_event") is None:
+        return lens
+    if LEVELS.index(lens["heat"]) >= LEVELS.index(previous_lens["heat"]):
+        return lens
+    may_cool_on = _day(previous_lens["latest_event"], "previous latest_event") + timedelta(days=HOLD_DAYS)
+    if today >= may_cool_on:
+        return lens
+    return {**lens, "heat": previous_lens["heat"], "latest_event": previous_lens["latest_event"],
+            "held_until": may_cool_on.isoformat()}
+
+
+def validate_state(state: dict, previous=None, test_today: date | None = None) -> dict:
+    """Checks the record lens by lens, holds a heat that is still inside its
+    window, derives the level from the lenses and the trend from the previous
+    judgment. Fails loudly on anything unsourced or out of the rubric, so the
+    agent can fix it and call again."""
     validate(state, STATE_SCHEMA, "state")
     _limited(state, "state")
     if not 0 <= state["peace_score"] <= 100:
@@ -153,13 +173,20 @@ def validate_state(state: dict, previous=None) -> dict:
     for text_field in ("peace_score_reason", "overview", "outlook"):
         if not state[text_field].strip():
             raise ValueError(f"state.{text_field} must not be empty")
-    if len(state["conflicts"]) > MAX_CONFLICTS:
-        raise ValueError(f"state.conflicts holds {len(state['conflicts'])}, at most {MAX_CONFLICTS} allowed; keep the most important")
-    for index, conflict in enumerate(state["conflicts"]):
-        validate_conflict(conflict, f"state.conflicts[{index}]")
-    level = max((conflict["heat"] for conflict in state["conflicts"]), key=LEVELS.index, default=LEVELS[0])
+    missing = set(LENSES) - set(state["lenses"])
+    unknown = set(state["lenses"]) - set(LENSES)
+    if missing or unknown:
+        raise ValueError(f"state.lenses must hold exactly {', '.join(LENSES)}: every lens is judged every run"
+                         + (f"; missing {', '.join(sorted(missing))}" if missing else "")
+                         + (f"; unknown {', '.join(sorted(unknown))}" if unknown else ""))
+    today = test_today or timezone.localdate()
+    previous_lenses = (previous.state.get("lenses") or {}) if previous is not None else {}
+    for key in LENSES:
+        lens = validate_lens(state["lenses"][key], f"state.lenses.{key}")
+        state["lenses"][key] = _hold(lens, previous_lenses.get(key), today)
+    level = max((lens["heat"] for lens in state["lenses"].values()), key=LEVELS.index)
     if state.get("level") not in (None, level):
-        raise ValueError(f"state.level is derived from the conflicts ({level}); leave it out")
+        raise ValueError(f"state.level is derived from the lenses ({level}); leave it out")
     state["level"] = level
     if previous is not None:
         change = state["peace_score"] - previous.state["peace_score"]
@@ -177,18 +204,27 @@ alert_for = level_change_alert
 def research_prompt(tracker, previous) -> str:
     name, iso3 = tracker.subject["name"], tracker.subject["iso3"]
     heat_lines = "\n".join(f"- {heat}: {definition}" for heat, definition in HEAT_DEFINITIONS.items())
-    kind_lines = "\n".join(f"- {kind}: {definition}" for kind, definition in CONFLICT_KIND_DEFINITIONS.items())
+    lens_lines = "\n".join(f"- {key}: {definition}" for key, definition in LENSES.items())
     if previous:
         previous_line = (f"Previous judgment ({previous.at:%Y-%m-%d}): peace score {previous.state['peace_score']}, level "
                          f"{previous.level}. Reason then: {previous.state['peace_score_reason']}")
+        held = [f"{key}: {lens['heat']} since {lens['latest_event']}" for key, lens in (previous.state.get("lenses") or {}).items()
+                if lens["heat"] in ("warm", "hot")]
+        if held:
+            previous_line += "\nHeats on file that only come down " + f"{HOLD_DAYS} days after their latest event: " + "; ".join(held)
     else:
         previous_line = "No previous judgment: this is the first."
     return "\n\n".join([
         f"Research {name} ({iso3}) for the tracker \"{tracker.title}\" (slug: {tracker.slug}).",
         f"Standing brief:\n{tracker.brief}",
         previous_line,
-        f"Search the web for the latest, at most {MAX_SEARCHES} searches. Prefer primary and reputable sources (governments, UN "
-        "agencies, International Crisis Group, ACLED, Reuters, AP, major national press). Never invent facts, dates or URLs.",
+        f"Six lenses, every one judged every run:\n{lens_lines}",
+        f"Search the web for the latest, at most {MAX_SEARCHES} searches: at least one per lens, naming the country and the lens's "
+        "subject. A search whose results are all older than 30 days is not a finding, it is a stale index: search that lens "
+        "again with different words in extended mode before concluding anything. Open the page a heat rests on; a calm lens "
+        "needs an opened page from the last 30 days that covers the subject and shows nothing happening. Prefer primary and "
+        "reputable sources (governments, UN agencies, International Crisis Group, ACLED, Reuters, AP, major national press). "
+        "Never invent facts, dates or URLs.",
         "Step 1. For every page you rely on, call record_observation once: slug, observed_at = the page's date (or today's date "
         "with payload {\"undated\": true} when it shows none), source_url, a one-sentence summary of what the page says, and "
         "payload {\"title\": the page title}. Keep the ids it returns.",
@@ -199,22 +235,16 @@ def research_prompt(tracker, previous) -> str:
         "  \"peace_score_reason\": \"one sentence, max 300 characters\",\n"
         "  \"overview\": \"2-4 sentences: the country's security and political situation today\",\n"
         "  \"outlook\": \"2-4 sentences: the next 12-24 months, including exposure to a wider regional or world war\",\n"
-        "  \"conflicts\": [ {\n"
-        "    \"title\": \"short name, max 150 characters\", \"kind\": <one of the kinds below>, \"scope\": \"internal\" | \"external\",\n"
+        "  \"lenses\": { <each lens key>: {\n"
         "    \"heat\": <one of the heats below>, \"summary\": \"one sentence, max 300 characters\",\n"
-        "    \"detail\": \"1-3 paragraphs: what is happening, why, what changed recently\", \"parties\": [\"...\"],\n"
-        "    \"since\": \"YYYY-MM-DD or YYYY\", \"place\": null | {\"name\": \"...\", \"kind\": \"city\" | \"area\", \"latitude\": <float>, \"longitude\": <float>},\n"
-        "    \"counterpart_iso3\": null | \"ISO3 of the other state in an external conflict\", \"source_urls\": [\"https://...\"]\n"
-        "  } ]\n"
+        "    \"detail\": \"1-3 paragraphs: what is happening, why, what changed recently\",\n"
+        "    \"latest_event\": \"YYYY-MM-DD of the latest event the heat rests on; required for warm and hot, null when nothing dated\",\n"
+        "    \"source_urls\": [\"https://... pages you opened\"]\n"
+        "  } }\n"
         "}\n"
-        "Do not set level: it is derived from the hottest conflict.",
-        f"Heats (how violent the conflict is right now):\n{heat_lines}",
-        f"Kinds:\n{kind_lines}",
-        "Scope: internal is within the country's own society or state; external is with another state or a foreign actor. "
-        "Place: pin a conflict to a city or an area when it is concentrated there, null when country-wide. Cover every active or "
-        "frozen armed conflict, terrorism and insurgency; political crises; sectarian, ethnic or religious rifts; crime that shapes "
-        f"daily life; diplomatic standoffs; economic warfare. Between 0 and {MAX_CONFLICTS} conflicts, most important first; a "
-        "country with nothing notable returns an empty list. Every conflict needs at least one source URL you actually opened.",
+        "Do not set level: it is derived from the hottest lens. Do not set held_until: the judge keeps a warm or hot heat "
+        f"until {HOLD_DAYS} days after its latest event, whatever this run finds.",
+        f"Heats (how violent the lens is right now):\n{heat_lines}",
         PEACE_SCORE_RUBRIC,
         "Finish with one line: the peace score, the level, and the change since the previous judgment in a few words.",
     ])
