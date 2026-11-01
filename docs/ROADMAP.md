@@ -115,6 +115,13 @@ out: a stretched-above line, holidays in the market clock (an idle pass),
 and any e2e of the tick itself (it would need a third fake; the unit test
 covers the rule).
 
+Exit test 3 passed 2026-11-01, after the investment engine's 23 names were
+imported on 10-28: "Did anything change about my CEG thesis?" was answered
+in 29 cents from two filed news observations (search_observations twice,
+get_tracker, no web search) and the screen moved to the CEG price view. The
+import also found the one live failure of the tick: Yahoo takes 20 symbols a
+request, so the list is now sent in batches.
+
 ## Phase 4: life
 
 Build: `kinds/campaign` and `kinds/practice` with the `progress.md` schema
