@@ -13,7 +13,11 @@ cannot cross a line it did not cross on the trading day before.
 
 Yahoo's spark endpoint is unofficial (the engine ran on it from 2026-07 to
 2026-10 without a key); it rejects library user agents, so a browser one is
-sent. Response order is not request order, so quotes are keyed by symbol."""
+sent. Response order is not request order, so quotes are keyed by symbol.
+It takes at most 20 symbols a request: on 2026-10-29 and 10-30 every tick of
+the 23-name list came back 400 "Number of symbols needs to be less than or
+equal to 20" and no stock had a price for two trading days, so the list is
+sent in batches."""
 from __future__ import annotations
 
 import logging
@@ -34,6 +38,7 @@ log = logging.getLogger(__name__)
 MARKET_TZ = ZoneInfo("America/New_York")
 MARKET_OPEN, MARKET_CLOSE = time(9, 30), time(16, 0)
 SPARK_URL = "https://query1.finance.yahoo.com/v7/finance/spark?symbols={tickers}&range=1d&interval=1d"
+SPARK_BATCH = 20
 BROWSER_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
 SOURCE = "yahoo"
 
@@ -66,9 +71,13 @@ def parse_spark(payload, fetched_at: datetime) -> dict[str, Quote]:
 
 
 def fetch_quotes(tickers: list[str]) -> dict[str, Quote]:
-    response = httpx.get(SPARK_URL.format(tickers=",".join(tickers)), timeout=20, headers={"User-Agent": BROWSER_UA})
-    response.raise_for_status()
-    return parse_spark(response.json(), timezone.now())
+    quotes = {}
+    for start in range(0, len(tickers), SPARK_BATCH):
+        batch = tickers[start:start + SPARK_BATCH]
+        response = httpx.get(SPARK_URL.format(tickers=",".join(batch)), timeout=20, headers={"User-Agent": BROWSER_UA})
+        response.raise_for_status()
+        quotes.update(parse_spark(response.json(), timezone.now()))
+    return quotes
 
 
 def run(job, run) -> dict:

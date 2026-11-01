@@ -80,6 +80,26 @@ def test_parse_spark_keys_by_symbol_and_reads_the_exchange_time():
     assert quotes["CEG"] == prices.Quote("CEG", 168.4, fetched)
 
 
+def test_fetch_quotes_asks_yahoo_twenty_symbols_at_a_time(monkeypatch):
+    tickers = [f"T{n}" for n in range(23)]
+    asked = []
+
+    class Response:
+        def __init__(self, url):
+            self.symbols = url.split("symbols=")[1].split("&")[0].split(",")
+
+        def raise_for_status(self):
+            assert len(self.symbols) <= 20, "Yahoo answers 400 above 20 symbols"
+
+        def json(self):
+            return {"spark": {"result": [{"symbol": s, "response": [{"meta": {"regularMarketPrice": 1.0}}]} for s in self.symbols]}}
+
+    monkeypatch.setattr(prices.httpx, "get", lambda url, **kw: asked.append(url) or Response(url))
+    quotes = prices.fetch_quotes(tickers)
+    assert set(quotes) == set(tickers)
+    assert [len(Response(url).symbols) for url in asked] == [20, 3]
+
+
 @pytest.mark.django_db
 def test_crossing_alerts_once_and_climbing_back_closes_quietly(ceg, ticking):
     tick, sent = ticking
