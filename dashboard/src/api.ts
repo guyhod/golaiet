@@ -14,7 +14,7 @@ export type Observation = {
   observed_at: string;
   source_url: string;
   summary: string;
-  payload: Record<string, string | number | null>;
+  payload: Record<string, unknown>;
 };
 
 export type Tracker = {

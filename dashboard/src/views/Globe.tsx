@@ -42,7 +42,7 @@ export function Globe({ shown, onShow }: { shown: string | null; onShow: (slug: 
     setDetail(null);
     if (!shown) return;
     const load = () =>
-      getJson<TrackerDetail>(`/api/trackers/${shown}?limit=100`)
+      getJson<TrackerDetail>(`/api/trackers/${shown}?limit=100&sourced=true`)
         .then((loaded) => !cancelled && (setDetail(loaded), setError(null)))
         .catch((failure) => !cancelled && setError(String(failure)));
     load();

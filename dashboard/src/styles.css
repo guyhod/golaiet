@@ -155,12 +155,22 @@ main.full > .globe { flex: 1; height: auto; min-height: 0; }
 .stock .figure { font-size: 2rem; }
 .stock .chart { flex: none; min-height: 11rem; height: 11rem; }
 
-/* The news room: a desk per country, War and Politics side by side, items by day. */
-.news { display: flex; flex-direction: column; gap: 2rem; }
+/* The news room, in Hebrew: a desk per country, war and politics side by side; per lens the
+   digest with its figure, then the items by day. */
+.news { display: flex; flex-direction: column; gap: 2rem; text-align: right; }
 .desk h1 { font-size: 1.6rem; margin-bottom: 0.8rem; }
-.desk .columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(24rem, 1fr)); gap: 1.4rem; }
-.desk h2 { font-size: 1.1rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 0.6rem; }
-.desk .day h3 { font-size: 0.9rem; color: var(--muted); margin: 0.8rem 0 0.3rem; }
-.desk .item { background: var(--panel); border: 1px solid var(--line); border-radius: 0.5rem; padding: 0.7rem 0.9rem; margin-bottom: 0.5rem; }
-.desk .item p { margin: 0 0 0.3rem; line-height: 1.4; }
+.desk .columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(24rem, 1fr)); gap: 1.6rem; }
+.desk h2 { font-size: 1.1rem; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 0.6rem; }
+.desk .lens-news { margin-bottom: 1.6rem; }
+.desk .lens-news h3 { font-size: 1rem; margin: 0 0 0.5rem; }
+.desk .digest { background: var(--panel); border: 1px solid var(--line); border-right: 0.3rem solid var(--level-colour, var(--lvl-1)); border-radius: 0.5rem; padding: 0.9rem 1rem; }
+.desk .digest p { margin: 0 0 0.6rem; line-height: 1.55; font-size: 1.05rem; }
+.desk .figure { margin: 0.6rem 0 0.8rem; }
+.desk .figure h4 { font-size: 0.9rem; color: var(--muted); margin: 0 0 0.2rem; }
+.desk .figure .chart { height: 9rem; }
+.desk .figure .notes { list-style: none; padding: 0; margin: 0.3rem 0 0; font-size: 0.9rem; color: var(--muted); }
+.desk .lens-news > h4 { font-size: 0.8rem; letter-spacing: 0.05em; margin: 0.9rem 0 0; }
+.desk .day h5 { font-size: 0.85rem; color: var(--muted); margin: 0.6rem 0 0.3rem; font-weight: normal; }
+.desk .item { background: var(--panel); border: 1px solid var(--line); border-radius: 0.5rem; padding: 0.6rem 0.9rem; margin-bottom: 0.4rem; }
+.desk .item p { margin: 0 0 0.3rem; line-height: 1.45; }
 .desk .item a { color: var(--muted); text-decoration: underline; }

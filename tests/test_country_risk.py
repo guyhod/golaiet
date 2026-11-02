@@ -24,7 +24,7 @@ def record(**lenses):
 
 
 def test_subject_is_filled_from_the_iso_list():
-    assert country_risk.validate_subject({"iso3": "irn"}) == {"iso3": "IRN", "name": "Iran", "numeric": "364"}
+    assert country_risk.validate_subject({"iso3": "irn"}) == {"iso3": "IRN", "iso2": "IR", "name": "Iran", "numeric": "364"}
     with pytest.raises(ValueError, match="not an ISO 3166-1"):
         country_risk.validate_subject({"iso3": "ZZZ"})
 
@@ -97,20 +97,41 @@ def test_the_desk_follows_named_lenses_and_tags_its_items():
     assert country_risk.validate_payload({"title": "Reuters", "lens": "security"})
     with pytest.raises(ValueError, match="payload.lens must be one of"):
         country_risk.validate_payload({"lens": "crime"})
+    with pytest.raises(ValueError, match="payload.digest needs payload.lens"):
+        country_risk.validate_payload({"digest": True})
+    with pytest.raises(ValueError, match="payload.figure belongs to a digest"):
+        country_risk.validate_payload({"lens": "security", "figure": {"title": "x", "bars": []}})
+    with pytest.raises(ValueError, match=r"payload.figure.bars\[0\] is missing required field 'value'"):
+        country_risk.validate_payload({"lens": "security", "digest": True, "figure": {"title": "x", "bars": [{"label": "a"}]}})
+    with pytest.raises(ValueError, match="needs 1 to 8 bars"):
+        country_risk.validate_payload({"lens": "security", "digest": True, "figure": {"title": "x", "bars": []}})
+    figure = {"title": "מנדטים", "unit": "מנדטים", "bars": [{"label": "אייזנקוט", "value": 48, "note": "ליברמן, גולן, בנט"}]}
+    assert country_risk.validate_payload({"lens": "political_stability", "digest": True, "figure": figure})
+    sourced = country_risk.validate_subject({"iso3": "isr", "desk": ["security"], "desk_sources": ["https://www.ynet.co.il/", "https://www.ynet.co.il/"]})
+    assert sourced["desk_sources"] == ["https://www.ynet.co.il/"]
+    with pytest.raises(ValueError, match="desk_sources must be https URLs"):
+        country_risk.validate_subject({"iso3": "isr", "desk": ["security"], "desk_sources": ["ynet"]})
+    with pytest.raises(ValueError, match="desk_sources needs subject.desk"):
+        country_risk.validate_subject({"iso3": "isr", "desk_sources": ["https://www.ynet.co.il/"]})
     assert [job["kind"] for job in country_risk.jobs({"iso3": "ISR", "desk": ["security"]})] == ["assess", "collect"]
     assert [job["kind"] for job in country_risk.jobs({"iso3": "FRA"})] == ["assess"]
 
 
 def test_the_desk_prompt_and_the_brief_that_reads_its_leads():
-    tracker = SimpleNamespace(subject={"name": "Israel", "iso3": "ISR", "desk": ["security", "political_stability"]},
+    tracker = SimpleNamespace(subject={"name": "Israel", "iso3": "ISR", "desk": ["security", "political_stability"],
+                                       "desk_sources": ["https://www.ynet.co.il/", "https://www.haaretz.co.il/"]},
                               title="Israel", slug="isr", brief="Guy lives here.")
     item = SimpleNamespace(observed_at=date(2026, 11, 1), source_url="https://reuters.example/coalition",
                            summary="No bloc reached 61 seats.", payload={"title": "Reuters", "lens": "political_stability"})
+    digest = SimpleNamespace(observed_at=date(2026, 11, 1), source_url="", summary="אין גוש של 61.", payload={"lens": "political_stability", "digest": True})
+    older = SimpleNamespace(observed_at=date(2026, 10, 31), source_url="", summary="ישן.", payload={"lens": "political_stability", "digest": True})
     page = SimpleNamespace(observed_at=date(2026, 10, 26), source_url="https://reuters.example/bg", summary="Background.", payload={"title": "Reuters"})
-    prompt = country_risk.collect_prompt(tracker, [item, page])
+    prompt = country_risk.collect_prompt(tracker, [digest, item, older, page])
     assert "daily news desk for Israel" in prompt and "- security:" in prompt and "- political_stability:" in prompt
     assert "- islam:" not in prompt and "[political_stability] https://reuters.example/coalition" in prompt
     assert "https://reuters.example/bg" not in prompt and f"At most {country_risk.MAX_DESK_ITEMS_PER_LENS} items per lens" in prompt
+    assert "in Hebrew" in prompt and "Open with WebFetch, one by one, the front page of every site here: https://www.ynet.co.il/, https://www.haaretz.co.il/" in prompt
+    assert "[political_stability] אין גוש של 61." in prompt and "ישן." not in prompt and '"digest": true' in prompt
     with pytest.raises(ValueError, match="no desk lenses"):
         country_risk.collect_prompt(SimpleNamespace(subject={"name": "France", "iso3": "FRA"}, title="France", slug="fra", brief="."), [])
     brief = country_risk.research_prompt(tracker, None, leads=[item])
@@ -137,7 +158,7 @@ def test_country_tracker_gets_a_research_job_and_alerts_on_heat(monkeypatch):
     monkeypatch.setenv("GOLAIET_MESSAGE_ID", "")
     monkeypatch.setenv("GOLAIET_JOB_RUN_ID", "")
     created = tools.create_tracker("isr", "Israel", "country_risk", {"iso3": "isr"}, "Guy lives here.", "weekly")
-    assert created["subject"] == {"iso3": "ISR", "name": "Israel", "numeric": "376"} and created["cadence"] == "weekly"
+    assert created["subject"] == {"iso3": "ISR", "iso2": "IL", "name": "Israel", "numeric": "376"} and created["cadence"] == "weekly"
     job = Job.objects.get(name="assess:isr")
     assert job.target == "agent.flows.research.run" and job.schedule == "0 7 * * mon"
     tools.update_tracker("isr", cadence="daily")

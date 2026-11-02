@@ -64,15 +64,25 @@ SUBJECT_SCHEMA = {
     "iso3": (str, True),
     "name": (str, False),       # filled from the ISO list
     "numeric": (str, False),    # filled from the ISO list: the id the globe's polygons carry
+    "iso2": (str, False),       # filled from the ISO list: the code a browser names the country by in any language
     "desk": (list, False),      # lenses a daily news desk follows; Israel's since 2026-11-02 (security, politics)
+    "desk_sources": (list, False),  # sites the desk reads first; Guy's Hebrew press for Israel
 }
 
-# An observation is one source the research session used, or one item the desk filed.
+# An observation is one source the research session used, one item the desk filed,
+# or the desk's digest of a lens for the day (no source: it is the desk's own words).
 PAYLOAD_SCHEMA = {
     "title": (str, False),
     "undated": (bool, False),   # the page shows no date; observed_at is then the day it was read
-    "lens": (str, False),       # desk items only: the lens the item bears on
+    "lens": (str, False),       # desk rows only: the lens the row bears on
+    "digest": (bool, False),    # the desk's picture of the lens today; the summary is the text
+    "figure": (dict, False),    # digest only: the picture as a few bars, FIGURE_SCHEMA
 }
+# Guy's ask on 2026-11-02: not headlines but the state of play, and a widget where a number tells it
+# (seats behind each candidate for prime minister, incidents per front).
+FIGURE_SCHEMA = {"title": (str, True), "unit": (str, False), "bars": (list, True)}
+BAR_SCHEMA = {"label": (str, True), "value": (float, True), "note": (str, False)}
+MAX_FIGURE_BARS = 8
 
 STATE_SCHEMA = {
     "level": (str, False),               # derived from the lenses; a value that disagrees is an error
@@ -123,13 +133,22 @@ def validate_subject(subject: dict) -> dict:
     validate(subject, SUBJECT_SCHEMA, "subject")
     found = country(subject["iso3"])
     # The common name where ISO has one ('Iran', not 'Iran, Islamic Republic of').
-    filled = {"iso3": found.alpha_3, "name": getattr(found, "common_name", found.name), "numeric": found.numeric}
+    filled = {"iso3": found.alpha_3, "iso2": found.alpha_2, "name": getattr(found, "common_name", found.name),
+              "numeric": found.numeric}
     desk = subject.get("desk")
     if desk:
         unknown = [lens for lens in desk if lens not in LENSES]
         if unknown:
             raise ValueError(f"subject.desk lenses must be among {', '.join(LENSES)}, got {', '.join(map(str, unknown))}")
         filled["desk"] = list(dict.fromkeys(desk))
+    sources = subject.get("desk_sources")
+    if sources:
+        if not desk:
+            raise ValueError("subject.desk_sources needs subject.desk lenses to read for")
+        odd = [site for site in sources if not isinstance(site, str) or not site.startswith("https://")]
+        if odd:
+            raise ValueError(f"subject.desk_sources must be https URLs, got {', '.join(map(str, odd))}")
+        filled["desk_sources"] = list(dict.fromkeys(sources))
     return filled
 
 
@@ -138,6 +157,17 @@ def validate_payload(payload: dict) -> dict:
     lens = payload.get("lens")
     if lens is not None and lens not in LENSES:
         raise ValueError(f"payload.lens must be one of {', '.join(LENSES)}, got {lens!r}")
+    if payload.get("digest") and lens is None:
+        raise ValueError("payload.digest needs payload.lens: the lens the digest pictures")
+    figure = payload.get("figure")
+    if figure is not None:
+        if not payload.get("digest"):
+            raise ValueError("payload.figure belongs to a digest")
+        validate(figure, FIGURE_SCHEMA, "payload.figure")
+        if not 1 <= len(figure["bars"]) <= MAX_FIGURE_BARS:
+            raise ValueError(f"payload.figure.bars needs 1 to {MAX_FIGURE_BARS} bars, got {len(figure['bars'])}")
+        for position, bar in enumerate(figure["bars"]):
+            validate(bar, BAR_SCHEMA, f"payload.figure.bars[{position}]")
     return payload
 
 
@@ -235,34 +265,60 @@ alert_for = level_change_alert
 
 
 def collect_prompt(tracker, recent_observations) -> str:
-    """The daily desk: the day's news on the desk lenses only, a few items each,
-    tagged with the lens they bear on. The brief judges once a week; between
-    briefs the desk is what the News screen shows and what the next brief reads
-    as leads. Guy asked for it on 2026-11-02 for Israel: coming war, and the
-    stability of its politics."""
+    """The daily desk: the day's news on the desk lenses only, read first from the
+    sites in the subject, filed as a few items per lens and one digest per lens,
+    all in Hebrew. The digest is the state of play, not a headline, with a small
+    figure where a number tells it. The brief judges once a week; between briefs
+    the desk is what the News screen shows and what the next brief reads as
+    leads. Guy asked for it on 2026-11-02 for Israel: coming war, and the
+    stability of its politics; the same evening he asked for Hebrew, the state
+    of play instead of headlines, and his four Hebrew papers as sources."""
     name = tracker.subject["name"]
     desk = tracker.subject.get("desk") or []
     if not desk:
         raise ValueError(f"{tracker.slug} has no desk lenses in its subject")
+    sources = tracker.subject.get("desk_sources") or []
     lens_lines = "\n".join(f"- {key}: {LENSES[key]}" for key in desk)
-    filed = "\n".join(f"- {observation.observed_at:%Y-%m-%d} [{observation.payload.get('lens')}] {observation.source_url}: "
-                      f"{observation.summary}"
-                      for observation in recent_observations if observation.payload.get("lens")) or "- (none yet)"
+    items = [row for row in recent_observations if row.payload.get("lens") and not row.payload.get("digest")]
+    filed = "\n".join(f"- {row.observed_at:%Y-%m-%d} [{row.payload['lens']}] {row.source_url}: {row.summary}"
+                      for row in items) or "- (none yet)"
+    previous = {}
+    for row in recent_observations:
+        if row.payload.get("digest") and row.payload["lens"] not in previous:
+            previous[row.payload["lens"]] = row
+    on_file = "\n".join(f"- {row.observed_at:%Y-%m-%d} [{lens}] {row.summary}" for lens, row in previous.items()) or "- (none yet)"
+    # The first run with sources (2026-11-02) searched with site: queries, got other outlets back and never
+    # opened the papers, so the opening is a numbered step and the search is only for the stories themselves.
+    where = (f"Step 0, the papers. Open with WebFetch, one by one, the front page of every site here: "
+             f"{', '.join(sources)}. Take the day's developments on each lens from what those pages show, then open "
+             "the stories themselves (WebFetch the story URL, or search for its headline to find it) for the facts and "
+             "figures. Other outlets only to confirm a fact or a figure." if sources else
+             f"Step 0. Search the web for today's and yesterday's news on each lens in {name}, at least one search per lens.")
     return "\n\n".join([
-        f"You are the daily news desk for {name} (tracker \"{tracker.title}\", slug: {tracker.slug}).",
+        f"You are the daily news desk for {name} (tracker \"{tracker.title}\", slug: {tracker.slug}). Guy reads it in "
+        "Hebrew: write every summary and every digest in Hebrew.",
         f"Standing brief:\n{tracker.brief}",
         f"The desk follows these lenses and no others:\n{lens_lines}",
-        f"Already filed (do not file these again):\n{filed}",
-        f"Search the web for today's and yesterday's news on each lens in {name}, at least one search per lens with the "
-        "country and the lens's subject in the query. Keep only what a reader of that lens needs today: a development, "
-        "a decision, a dated event, a figure. Skip commentary, repeats of what is filed, and anything older than a week.",
-        f"For each item kept, call record_observation once: slug, observed_at = the item's publication date or time, "
-        "source_url, a one-or-two-sentence summary in your own words that says what happened and what it indicates for "
-        "the lens, and payload {\"title\": the page title, \"lens\": the lens key}. At most "
-        f"{MAX_DESK_ITEMS_PER_LENS} items per lens, the ones that matter most. Prefer primary and reputable sources "
-        "(government, Reuters, AP, major national press). Never invent facts, dates or URLs.",
-        "If nothing new was found on a lens, file nothing for it and say so. Finish with one short paragraph: what you "
-        "filed per lens and what you skipped.",
+        where,
+        f"Items already filed (do not file these again):\n{filed}",
+        f"The digest on file from the previous run, per lens:\n{on_file}",
+        "Step 1, the items. Keep only what a reader of the lens needs today: a development, a decision, a dated event, "
+        "a figure; skip commentary, repeats of what is filed, and anything older than a week. For each item kept, call "
+        "record_observation once: slug, observed_at = the item's publication date or time, source_url, a one-or-two-"
+        "sentence Hebrew summary that says what happened and what it indicates for the lens, and payload "
+        f"{{\"title\": the page title, \"lens\": the lens key}}. At most {MAX_DESK_ITEMS_PER_LENS} items per lens, "
+        "the ones that matter most. Never invent facts, dates or URLs.",
+        "Step 2, the digest: one per lens, every run, even when nothing new happened (then it says what stands). Call "
+        "record_observation with source_url \"\" (it is your own words), observed_at = today, summary = the state of "
+        "play in Hebrew, 3 to 6 sentences, a picture and not a headline: who stands where, with names and figures. For "
+        "political_stability: who is proposed for prime minister and which parties and leaders back each, with seat "
+        "counts. For internal_stability: what moves on the street, protests, strikes, reservists, with sizes. For "
+        "security: each front (Gaza, Lebanon, Iran, the West Bank, Yemen, Syria) and its state today. Payload "
+        "{\"lens\": the lens key, \"digest\": true, \"figure\": {\"title\": Hebrew, \"unit\": Hebrew, \"bars\": "
+        "[{\"label\": Hebrew, \"value\": number, \"note\": Hebrew}]}} where the figure is the picture as at most "
+        f"{MAX_FIGURE_BARS} bars (seats behind each candidate with the backing parties as the note; incidents per front "
+        "in the last day); leave figure out when no number tells the story.",
+        "Finish with one short paragraph in English: what you filed per lens and what you skipped.",
     ])
 
 

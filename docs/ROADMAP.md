@@ -86,7 +86,11 @@ Israel's news desk, 2026-11-02: a country whose subject names desk lenses gets
 a daily 06:30 session that files the day's items tagged by lens, the Monday
 brief reads them as leads, and the News screen shows them as War (security)
 and Politics (political and internal stability). Israel only for now, on
-Guy's call; the desk is a subject field so a second country is rows.
+Guy's call; the desk is a subject field so a second country is rows. The
+same evening, on Guy's feedback: the desk writes in Hebrew, reads his four
+papers first (ynet, Maariv, Israel Hayom, Haaretz, in the subject), and files
+one digest per lens, the state of play with a small bar figure where a number
+tells it, which the screen shows above the items.
 
 ## Phase 3: stocks
 
