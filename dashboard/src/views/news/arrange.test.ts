@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import type { Observation, Tracker } from "../../api";
-import { arrangeNews, dayOf, deskTrackers, domainOf, figureOf } from "./arrange";
+import { arrangeNews, dayOf, deskTrackers, figureOf } from "./arrange";
 
 function item(id: number, at: string, lens: string | null, url = `https://www.ynet.co.il/${id}`): Observation {
   return { id, observed_at: at, source_url: url, summary: `item ${id}`, payload: lens ? { title: "t", lens } : { title: "t" } };
@@ -41,9 +41,4 @@ it("keeps only active countries with a desk", () => {
   const base: Tracker = { slug: "isr", title: "Israel", kind: "country_risk", status: "active", view: "globe", subject: { iso3: "ISR", desk: ["security"] }, observations: 0, latest_observation_at: null, level: null, level_rank: -1, latest_assessment: null };
   const shown = deskTrackers([base, { ...base, slug: "fra", subject: { iso3: "FRA" } }, { ...base, slug: "old", status: "paused" }, { ...base, slug: "ceg", kind: "stock" }]);
   expect(shown.map((t) => t.slug)).toEqual(["isr"]);
-});
-
-it("names a source by its domain", () => {
-  expect(domainOf("https://www.timesofisrael.com/liveblog")).toBe("timesofisrael.com");
-  expect(domainOf("not a url")).toBe("not a url");
 });

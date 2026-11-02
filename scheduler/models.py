@@ -4,6 +4,14 @@ so editing a job in admin takes effect live. JobRun is the run log, the cost
 ledger and the heartbeat: no run in N minutes is itself the alarm."""
 from django.db import models
 
+# How late a missed run may still fire. A session (a brief, a desk, a news collect) is worth running
+# hours late: on 2026-10-30 and 10-31 the Mac slept through 07:00 and two daily news runs were dropped,
+# and on Monday 2026-11-02 the 38 country briefs filled the scheduler's workers so 22 stock news
+# sessions and the VRAM collect queued past a 5-minute grace were dropped too. A tick or a heartbeat
+# is not: the next one is due within the hour.
+SESSION_GRACE_SEC = 6 * 3600
+TICK_GRACE_SEC = 300
+
 
 class Job(models.Model):
     class Kind(models.TextChoices):
@@ -30,7 +38,9 @@ class Job(models.Model):
     target = models.CharField(max_length=300, help_text="Dotted path to a callable: run(job, **params)")
     params = models.JSONField(default=dict, blank=True)
     misfire_grace_sec = models.PositiveIntegerField(
-        default=300, help_text="How late a missed run may still fire (e.g. after the Mac slept). Missed runs coalesce into one.")
+        default=SESSION_GRACE_SEC,
+        help_text="How late a missed run may still fire (after the Mac slept, or queued behind other sessions). "
+                  "Missed runs coalesce into one.")
     next_run_time = models.DateTimeField(null=True, blank=True,
                                          help_text="Written back by the scheduler process after each sync.")
     last_run = models.DateTimeField(null=True, blank=True)

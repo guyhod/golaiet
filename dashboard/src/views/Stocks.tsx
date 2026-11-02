@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { PricePoint, Tracker } from "../api";
-import { getJson, formatWhen } from "../api";
+import { formatWhen } from "../api";
+import { usePolled } from "../polled";
 import { Chart, echarts, paletteOf } from "../chart";
 import { LineChart } from "echarts/charts";
 import { priceOption } from "./price/option";
@@ -8,7 +9,6 @@ import { arrangeStocks, type Stock } from "./stocks/arrange";
 
 echarts.use([LineChart]);
 
-const REFRESH_MS = 60_000;
 const DAYS = 30;
 
 /** Every stock as a card: the price against its line and the last 30 days; a click opens the price view. */
@@ -26,18 +26,8 @@ export function Stocks({ trackers, onOpen }: { trackers: Tracker[]; onOpen: (tra
 
 function StockCard({ stock, onOpen }: { stock: Stock; onOpen: () => void }) {
   const { tracker, ticker, goodBelow, price, above } = stock;
-  const [points, setPoints] = useState<PricePoint[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    const load = () =>
-      getJson<PricePoint[]>(`/api/trackers/${tracker.slug}/prices?days=${DAYS}`)
-        .then((ticks) => !cancelled && setPoints(ticks))
-        .catch(() => undefined);   // the card's figures stand without the chart
-    load();
-    const timer = setInterval(load, REFRESH_MS);
-    return () => { cancelled = true; clearInterval(timer); };
-  }, [tracker.slug]);
-  const option = useMemo(() => (points.length ? priceOption(points, goodBelow, paletteOf(tracker.level_rank)) : null), [points, goodBelow, tracker.level_rank]);
+  const points = usePolled<PricePoint[]>(`/api/trackers/${tracker.slug}/prices?days=${DAYS}`).data;   // the card's figures stand without the chart
+  const option = useMemo(() => (points?.length ? priceOption(points, goodBelow, paletteOf(tracker.level_rank)) : null), [points, goodBelow, tracker.level_rank]);
   return (
     <article className={`stock lvl-${tracker.level_rank}`}>
       <button className="stock-head" onClick={onOpen}>

@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { PricePoint, TrackerDetail } from "../api";
-import { getJson, formatWhen } from "../api";
+import { formatWhen } from "../api";
+import { usePolled } from "../polled";
 import { Chart, echarts, paletteOf } from "../chart";
 import { LineChart } from "echarts/charts";
 import { Observations } from "./Observations";
@@ -9,31 +10,14 @@ import type { ViewProps } from "./index";
 
 echarts.use([LineChart]);
 
-const REFRESH_MS = 60_000;
 const DAYS = 30;
 
 /** A stock: the price line against the good-below line, the current level, and the news filed against the thesis. */
 export function Price({ slug, onClose }: ViewProps) {
-  const [detail, setDetail] = useState<TrackerDetail | null>(null);
-  const [points, setPoints] = useState<PricePoint[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    const load = () =>
-      Promise.all([
-        getJson<TrackerDetail>(`/api/trackers/${slug}?sourced=true&limit=50`),
-        getJson<PricePoint[]>(`/api/trackers/${slug}/prices?days=${DAYS}`),
-      ])
-        .then(([loaded, ticks]) => !cancelled && (setDetail(loaded), setPoints(ticks), setError(null)))
-        .catch((failure) => !cancelled && setError(String(failure)));
-    load();
-    const timer = setInterval(load, REFRESH_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [slug]);
+  const polledDetail = usePolled<TrackerDetail>(`/api/trackers/${slug}?sourced=true&limit=50`);
+  const polledPoints = usePolled<PricePoint[]>(`/api/trackers/${slug}/prices?days=${DAYS}`);
+  const detail = polledDetail.data, points = polledPoints.data;
+  const error = polledDetail.error ?? polledPoints.error;
 
   const goodBelow = Number(detail?.subject.good_below ?? 0);
   const levelRank = detail?.level_rank ?? -1;

@@ -7,6 +7,7 @@ CLI has exited."""
 from chat import alerts
 from core import kinds
 from core.models import Assessment, Observation, Tracker
+from agent.flows import outcome, tracker_of
 from agent.prompts import RESEARCH_SYSTEM_PROMPT
 from agent.runner import ClaudeRunner
 
@@ -17,9 +18,7 @@ TOOLS = ["WebSearch", "WebFetch"]
 
 def run(job, run, lens: str | None = None) -> dict:
     """`lens` (off schedule, from manage.py research) narrows the session to one lens studied in depth."""
-    tracker: Tracker = job.tracker
-    if tracker is None:
-        raise ValueError(f"research job {job.name} has no tracker")
+    tracker = tracker_of(job)
     if tracker.status != Tracker.Status.ACTIVE:
         return {"summary": f"skipped: tracker is {tracker.status}"}
     previous = tracker.assessments.order_by("-at").first()
@@ -34,8 +33,4 @@ def run(job, run, lens: str | None = None) -> dict:
     recorded = Assessment.objects.filter(job_run=run).count()
     delivered = alerts.deliver(run)
     # A session that searched and then never recorded the judgment is a failed run, not a quiet one.
-    failed = result.is_error or result.is_billing_abort or recorded == 0
-    prefix = ("billing: " if result.is_billing_abort else "error: " if failed
-              else f"{filed} sources · {recorded} assessment · {delivered} alerts sent · ")
-    return {"summary": prefix + result.text[:500], "cost_usd": result.cost_usd,
-            "session_id": result.session_id, "failed": failed}
+    return outcome(result, f"{filed} sources · {recorded} assessment · {delivered} alerts sent · ", failed=recorded == 0)

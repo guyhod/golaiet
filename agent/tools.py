@@ -162,7 +162,6 @@ def update_tracker(slug: str, brief: str | None = None, cadence: str | None = No
     changed = []
     if subject is not None:
         tracker.subject = kinds.get(tracker.kind).validate_subject(subject)
-        tracker.save(update_fields=["subject"])
         _sync_jobs(tracker, _cadence_of(tracker) or "weekly")
         changed.append("subject")
     if brief is not None:

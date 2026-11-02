@@ -6,6 +6,7 @@ after the CLI has exited."""
 from chat import alerts
 from core import kinds
 from core.models import Assessment, Tracker
+from agent.flows import outcome, tracker_of
 from agent.prompts import ASSESS_SYSTEM_PROMPT
 from agent.runner import ClaudeRunner
 
@@ -15,9 +16,7 @@ MAX_OBSERVATIONS_IN_PROMPT = 60
 
 
 def run(job, run) -> dict:
-    tracker: Tracker = job.tracker
-    if tracker is None:
-        raise ValueError(f"assess job {job.name} has no tracker")
+    tracker = tracker_of(job)
     if tracker.status != Tracker.Status.ACTIVE:
         return {"summary": f"skipped: tracker is {tracker.status}"}
     previous = tracker.assessments.order_by("-at").first()
@@ -33,8 +32,4 @@ def run(job, run) -> dict:
                                 tools=TOOLS, env={"GOLAIET_JOB_RUN_ID": run.pk})
     recorded = Assessment.objects.filter(job_run=run).count()
     delivered = alerts.deliver(run)
-    failed = result.is_error or result.is_billing_abort
-    prefix = ("billing: " if result.is_billing_abort else "error: " if failed
-              else f"{recorded} assessment · {delivered} alerts sent · ")
-    return {"summary": prefix + result.text[:500], "cost_usd": result.cost_usd,
-            "session_id": result.session_id, "failed": failed}
+    return outcome(result, f"{recorded} assessment · {delivered} alerts sent · ")

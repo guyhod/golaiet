@@ -5,15 +5,15 @@ script checks New York's clock itself). Idempotent: existing rows are left
 alone, so an operator's edits in admin survive a re-seed."""
 from django.core.management.base import BaseCommand
 
-from scheduler.models import Job
+from scheduler.models import TICK_GRACE_SEC, Job
 
 SEED = (
     dict(name="reply", kind=Job.Kind.REPLY, trigger=Job.Trigger.MANUAL, schedule="",
          target="agent.flows.reply.run"),
     dict(name="heartbeat", kind=Job.Kind.HEARTBEAT, trigger=Job.Trigger.INTERVAL, schedule="1800",
-         target="scheduler.scripts.heartbeat.run"),
+         target="scheduler.scripts.heartbeat.run", misfire_grace_sec=TICK_GRACE_SEC),
     dict(name="prices", kind=Job.Kind.COLLECT, trigger=Job.Trigger.CRON, schedule="*/15 15-23 * * mon-fri",
-         target="scheduler.scripts.prices.run"),
+         target="scheduler.scripts.prices.run", misfire_grace_sec=TICK_GRACE_SEC),
 )
 
 

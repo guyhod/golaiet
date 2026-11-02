@@ -1,14 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
-import type { Observation, Tracker, TrackerDetail } from "../api";
-import { getJson } from "../api";
+import { useMemo } from "react";
+import type { Tracker, TrackerDetail } from "../api";
+import { hostOf } from "../api";
 import { Chart, echarts, paletteOf } from "../chart";
 import { BarChart } from "echarts/charts";
-import { arrangeNews, COLUMNS, deskTrackers, domainOf, figureOf, LENS_HE, type Day, type LensNews } from "./news/arrange";
+import { usePolled } from "../polled";
+import { arrangeNews, COLUMNS, deskTrackers, figureOf, LENS_HE, type Day, type LensNews } from "./news/arrange";
 import { figureOption } from "./news/figure";
 
 echarts.use([BarChart]);
 
-const REFRESH_MS = 60_000;
 const ROWS = 200;
 const HEBREW = "he-IL";
 
@@ -26,18 +26,8 @@ export function News({ trackers }: { trackers: Tracker[] }) {
 }
 
 function Desk({ tracker }: { tracker: Tracker }) {
-  const [rows, setRows] = useState<Observation[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    const load = () =>
-      getJson<TrackerDetail>(`/api/trackers/${tracker.slug}?limit=${ROWS}`)
-        .then((detail) => !cancelled && setRows(detail.recent_observations))
-        .catch(() => undefined);   // the last load stands until the next
-    load();
-    const timer = setInterval(load, REFRESH_MS);
-    return () => { cancelled = true; clearInterval(timer); };
-  }, [tracker.slug]);
-  const arranged = useMemo(() => arrangeNews(rows), [rows]);
+  const detail = usePolled<TrackerDetail>(`/api/trackers/${tracker.slug}?limit=${ROWS}`).data;
+  const arranged = useMemo(() => arrangeNews(detail?.recent_observations ?? []), [detail]);
   return (
     <section className="desk">
       <h1>{countryName(tracker)}</h1>
@@ -92,7 +82,7 @@ function DayList({ day }: { day: Day }) {
         <article key={item.id} className="item">
           <p>{item.summary}</p>
           <span className="muted small">
-            <a href={item.source_url} target="_blank" rel="noreferrer">{domainOf(item.source_url)}</a>
+            <a href={item.source_url} target="_blank" rel="noreferrer">{hostOf(item.source_url)}</a>
             {" · "}{formatTime(item.observed_at)}
           </span>
         </article>

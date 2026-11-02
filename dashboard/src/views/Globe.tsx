@@ -1,21 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Map as MapLibreMap, MapLayerMouseEvent } from "maplibre-gl";
 import type { Tracker, TrackerDetail } from "../api";
-import { arrowOf, getJson, formatWhen, hostOf } from "../api";
+import { arrowOf, formatWhen, hostOf } from "../api";
+import { usePolled } from "../polled";
 import { boundsOfCountry } from "./globe/countries";
 import { countryState, HEAT_RANK, LEGEND, LENSES, lensRanks, TREND_LEGEND, type Lens } from "./country";
 import { createMap, fillLayerId, fitWorld, flyToCountry, paint, select, type ColourBy } from "./globe/createMap";
-
-const REFRESH_MS = 60_000;
 
 const COLOUR_BY: [ColourBy, string][] = [["level", "hottest lens"], ["score", "peace score"], ["trend", "trend"]];
 
 /** The globe painted by every country tracker's level, with the record of the country picked on it, by a
  *  click or by the screen, beside it. */
 export function Globe({ shown, onShow }: { shown: string | null; onShow: (slug: string | null) => void }) {
-  const [countries, setCountries] = useState<Tracker[]>([]);
-  const [detail, setDetail] = useState<TrackerDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const polledTrackers = usePolled<Tracker[]>("/api/trackers");
+  const countries = useMemo(() => (polledTrackers.data ?? []).filter((tracker) => tracker.kind === "country_risk"), [polledTrackers.data]);
+  // The drawer lists sources; the desk's digests have none and belong to the News screen.
+  const polledDetail = usePolled<TrackerDetail>(shown ? `/api/trackers/${shown}?limit=100&sourced=true` : null);
+  const detail = polledDetail.data;
+  const error = polledDetail.error ?? polledTrackers.error;
   const containerRef = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<MapLibreMap | null>(null);
   const [colourBy, setColourBy] = useState<ColourBy>("level");
@@ -25,30 +27,6 @@ export function Globe({ shown, onShow }: { shown: string | null; onShow: (slug: 
   );
   const byNumericRef = useRef(byNumeric);
   byNumericRef.current = byNumeric;
-
-  useEffect(() => {
-    let cancelled = false;
-    const load = () =>
-      getJson<Tracker[]>("/api/trackers")
-        .then((all) => !cancelled && setCountries(all.filter((tracker) => tracker.kind === "country_risk")))
-        .catch((failure) => !cancelled && setError(String(failure)));
-    load();
-    const timer = setInterval(load, REFRESH_MS);
-    return () => { cancelled = true; clearInterval(timer); };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    setDetail(null);
-    if (!shown) return;
-    const load = () =>
-      getJson<TrackerDetail>(`/api/trackers/${shown}?limit=100&sourced=true`)
-        .then((loaded) => !cancelled && (setDetail(loaded), setError(null)))
-        .catch((failure) => !cancelled && setError(String(failure)));
-    load();
-    const timer = setInterval(load, REFRESH_MS);
-    return () => { cancelled = true; clearInterval(timer); };
-  }, [shown]);
 
   useEffect(() => {
     const created = createMap(containerRef.current!);

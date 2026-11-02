@@ -89,7 +89,7 @@ agent/       runner.py (CLI subprocess), tools.py (the functions), prompts.py,
 api/         django-ninja read-only API (health, trackers, alerts, focus + its SSE stream)
 dashboard/   Vite + React app with its own Dockerfile (node build → nginx) and nginx.conf;
              src/views/ is the view registry (feed, globe, price), src/views/globe/ the MapLibre globe,
-             src/chart.tsx the ECharts component every chart view shares;
+             src/chart.tsx the ECharts component every chart view shares, src/polled.ts the one way a screen reads the API;
              e2e/ the Playwright scenarios (playwright.config.ts)
 tests/       pytest-django; smoke/ (against a running stack), e2e/ (the fakes behind docker-compose.e2e.yml)
 docs/        the planning documents

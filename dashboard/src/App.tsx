@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { getJson, watchFocus, formatWhen } from "./api";
+import { watchFocus, formatWhen } from "./api";
 import type { Alert, Focus, Health, Tracker } from "./api";
+import { usePolled } from "./polled";
 import { Module } from "./Module";
 import { Globe } from "./views/Globe";
 import { News } from "./views/News";
@@ -16,46 +17,21 @@ export type Open = { slug: string; view: string; params: Record<string, unknown>
 type Screen = "globe" | "stocks" | "news" | "list";
 const SCREENS: [Screen, string][] = [["globe", "Globe"], ["stocks", "Stocks"], ["news", "News"], ["list", "List"]];
 
-const REFRESH_MS = 60_000;
 const ALERT_BANNER_HOURS = 24;
 
 export function App() {
-  const [health, setHealth] = useState<Health | null>(null);
-  const [trackers, setTrackers] = useState<Tracker[]>([]);
-  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const polledHealth = usePolled<Health>("/api/health");
+  const polledTrackers = usePolled<Tracker[]>("/api/trackers");
+  const polledAlerts = usePolled<Alert[]>("/api/alerts?limit=5");
+  const health = polledHealth.data;
+  const trackers = polledTrackers.data ?? [];
+  const alerts = polledAlerts.data ?? [];
+  const refreshedAt = polledTrackers.at;
+  const error = polledHealth.error ?? polledTrackers.error ?? polledAlerts.error;
   const [focus, setFocus] = useState<Focus | null>(null);
   const [open, setOpen] = useState<Open>(null);
   const [screen, setScreen] = useState<Screen>("globe");
   const [picked, setPicked] = useState<string | null>(null);
-  const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    const refresh = async () => {
-      try {
-        const [healthNow, trackersNow, alertsNow] = await Promise.all([
-          getJson<Health>("/api/health"),
-          getJson<Tracker[]>("/api/trackers"),
-          getJson<Alert[]>("/api/alerts?limit=5"),
-        ]);
-        if (cancelled) return;
-        setHealth(healthNow);
-        setTrackers(trackersNow);
-        setAlerts(alertsNow);
-        setRefreshedAt(new Date());
-        setError(null);
-      } catch (failure) {
-        if (!cancelled) setError(String(failure));
-      }
-    };
-    refresh();
-    const timer = setInterval(refresh, REFRESH_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, []);
 
   const show = (slug: string | null, view: string, params: Record<string, unknown>) => {
     if (slug && view === "globe") {

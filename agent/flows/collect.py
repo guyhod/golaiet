@@ -3,6 +3,7 @@ and files observations through record_observation. The count of rows this run
 wrote is the summary; the agent's closing paragraph is kept after it."""
 from core import kinds
 from core.models import Observation, Tracker
+from agent.flows import outcome, tracker_of
 from agent.prompts import COLLECT_SYSTEM_PROMPT
 from agent.runner import ClaudeRunner
 
@@ -12,9 +13,7 @@ RECENT_OBSERVATIONS_IN_PROMPT = 30
 
 
 def run(job, run) -> dict:
-    tracker: Tracker = job.tracker
-    if tracker is None:
-        raise ValueError(f"collect job {job.name} has no tracker")
+    tracker = tracker_of(job)
     if tracker.status != Tracker.Status.ACTIVE:
         return {"summary": f"skipped: tracker is {tracker.status}"}
     kind_module = kinds.get(tracker.kind)
@@ -24,7 +23,4 @@ def run(job, run) -> dict:
     result = ClaudeRunner().run(prompt, system_prompt=COLLECT_SYSTEM_PROMPT, allowed_tools=ALLOWED_TOOLS,
                                 tools=TOOLS, env={"GOLAIET_JOB_RUN_ID": run.pk})
     filed = Observation.objects.filter(job_run=run).count()
-    failed = result.is_error or result.is_billing_abort
-    prefix = "billing: " if result.is_billing_abort else "error: " if failed else f"{filed} new observations · "
-    return {"summary": prefix + result.text[:500], "cost_usd": result.cost_usd,
-            "session_id": result.session_id, "failed": failed}
+    return outcome(result, f"{filed} new observations · ")

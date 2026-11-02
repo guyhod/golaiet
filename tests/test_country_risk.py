@@ -160,7 +160,7 @@ def test_country_tracker_gets_a_research_job_and_alerts_on_heat(monkeypatch):
     created = tools.create_tracker("isr", "Israel", "country_risk", {"iso3": "isr"}, "Guy lives here.", "weekly")
     assert created["subject"] == {"iso3": "ISR", "iso2": "IL", "name": "Israel", "numeric": "376"} and created["cadence"] == "weekly"
     job = Job.objects.get(name="assess:isr")
-    assert job.target == "agent.flows.research.run" and job.schedule == "0 7 * * mon"
+    assert job.target == "agent.flows.research.run" and job.schedule == "0 7 * * mon" and job.misfire_grace_sec == 6 * 3600
     tools.update_tracker("isr", cadence="daily")
     assert Job.objects.get(name="assess:isr").schedule == "0 7 * * *"
     source = tools.record_observation("isr", "2026-10-09", "https://reuters.example/a", "Border fire.", {"title": "Reuters"})

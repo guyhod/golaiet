@@ -1,29 +1,12 @@
-import { useEffect, useState } from "react";
 import type { TrackerDetail } from "../api";
-import { getJson, formatWhen } from "../api";
+import { formatWhen } from "../api";
+import { usePolled } from "../polled";
 import { Observations } from "./Observations";
 import type { ViewProps } from "./index";
 
-const REFRESH_MS = 60_000;
-
 /** The generic view: latest judgment on top, then the observations with their sources. */
 export function Feed({ slug, onClose }: ViewProps) {
-  const [detail, setDetail] = useState<TrackerDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    const load = () =>
-      getJson<TrackerDetail>(`/api/trackers/${slug}?limit=50`)
-        .then((loaded) => !cancelled && (setDetail(loaded), setError(null)))
-        .catch((failure) => !cancelled && setError(String(failure)));
-    load();
-    const timer = setInterval(load, REFRESH_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [slug]);
+  const { data: detail, error } = usePolled<TrackerDetail>(`/api/trackers/${slug}?limit=50`);
 
   if (error) return <p className="empty">Cannot load {slug}: {error}</p>;
   if (!detail) return <p className="empty">Loading {slug}…</p>;

@@ -55,11 +55,3 @@ export function figureOf(digest: Observation | null): Figure | null {
   const figure = digest?.payload.figure as Figure | undefined;
   return figure && Array.isArray(figure.bars) && figure.bars.length ? figure : null;
 }
-
-export function domainOf(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
-}

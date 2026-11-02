@@ -4,6 +4,7 @@ import logging
 
 from chat import alerts, telegram
 from chat.models import Message
+from agent.flows import outcome
 from agent.prompts import REPLY_SYSTEM_PROMPT
 from agent.runner import ClaudeRunner
 
@@ -32,14 +33,11 @@ def run(job, run, *, message_id: int) -> dict:
         conversation.session_id = result.session_id
         conversation.save(update_fields=["session_id"])
 
-    failed = result.is_error or result.is_billing_abort
-    reply_text = FAILURE_REPLY.format(reason=result.text[:300]) if failed else result.text
+    report = outcome(result, "")
+    reply_text = FAILURE_REPLY.format(reason=result.text[:300]) if report["failed"] else result.text
     outgoing = Message.objects.create(conversation=conversation, direction=Message.Direction.OUT,
                                       text=reply_text, job_run=run)
     outgoing.telegram_message_id = telegram.send(reply_text, chat_id=conversation.chat_id)
     outgoing.save(update_fields=["telegram_message_id"])
     alerts.deliver(run)
-    return {
-        "summary": ("billing: " if result.is_billing_abort else "error: " if failed else "") + result.text[:500],
-        "cost_usd": result.cost_usd, "session_id": result.session_id, "failed": failed,
-    }
+    return report
