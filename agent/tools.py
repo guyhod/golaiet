@@ -94,6 +94,21 @@ def _parse_when(value: str, label: str) -> datetime:
     return parsed
 
 
+def _sync_jobs(tracker: Tracker, cadence: str) -> list[dict]:
+    """The tracker's jobs as its kind derives them from the subject: missing ones are
+    created at the cadence (or the spec's own schedule), ones the subject no longer
+    calls for are deleted (a country whose desk is dropped loses the daily session)."""
+    wanted = {f"{spec['kind']}:{tracker.slug}": spec for spec in kinds.get(tracker.kind).jobs(tracker.subject)}
+    tracker.jobs.exclude(name__in=wanted).delete()
+    jobs = []
+    for name, spec in wanted.items():
+        job, _ = Job.objects.get_or_create(name=name, defaults=dict(
+            kind=spec["kind"], tracker=tracker, trigger=Job.Trigger.CRON,
+            schedule=spec.get("schedule") or kinds.CADENCES[cadence], target=spec["target"]))
+        jobs.append({"name": job.name, "schedule": job.schedule, "first_run_at": _next_fire(job.schedule)})
+    return jobs
+
+
 def _next_fire(crontab: str) -> str:
     trigger = CronTrigger.from_crontab(crontab, timezone=ZoneInfo(settings.TIME_ZONE))
     fire = trigger.get_next_fire_time(None, timezone.now())
@@ -119,7 +134,8 @@ def create_tracker(slug: str, title: str, kind: str, subject: dict, brief: str, 
     """Start tracking something new. slug: short, lowercase, hyphens (e.g. vram-supply, isr).
     kind: topic (a web-researched subject), country_risk (one country's war risk and peace score) or
     stock (a listed company against a buy price). subject: the kind's fields (topic: {"query": ..., "regions": [...]};
-    country_risk: {"iso3": "ISR"}; stock: {"ticker": "CEG", "good_below": 170}).
+    country_risk: {"iso3": "ISR"}, with "desk": ["security", "political_stability"] for a daily news desk on those
+    lenses; stock: {"ticker": "CEG", "good_below": 170}).
     brief: standing instructions for collecting (for a stock: the thesis), in full sentences.
     cadence: hourly, daily or weekly (stock news: daily; prices tick on their own every 15 minutes).
     Creates the tracker and its collect job; returns when the first run is."""
@@ -133,11 +149,7 @@ def create_tracker(slug: str, title: str, kind: str, subject: dict, brief: str, 
         raise ValueError("brief must not be empty")
     tracker = Tracker.objects.create(slug=slug, title=title, kind=kind, subject=subject, brief=brief.strip(),
                                      view=kind_module.VIEW, created_by_message_id=_message_id())
-    jobs = []
-    for spec in kind_module.DEFAULT_JOBS:
-        job = Job.objects.create(name=f"{spec['kind']}:{slug}", kind=spec["kind"], tracker=tracker, trigger=Job.Trigger.CRON,
-                                 schedule=spec.get("schedule") or kinds.CADENCES[cadence], target=spec["target"])
-        jobs.append({"name": job.name, "schedule": job.schedule, "first_run_at": _next_fire(job.schedule)})
+    jobs = _sync_jobs(tracker, cadence)
     return dict(_tracker_dict(tracker), jobs=jobs)
 
 
@@ -145,11 +157,13 @@ def update_tracker(slug: str, brief: str | None = None, cadence: str | None = No
                    subject: dict | None = None) -> dict:
     """Change an existing tracker: a new brief (replaces the old one in full), a new cadence
     (hourly, daily, weekly), its status (active, paused, archived), or a new subject (the kind's
-    fields in full, e.g. a stock's new good_below). Omitted fields are untouched."""
+    fields in full, e.g. a stock's new good_below, a country's desk lenses). Omitted fields are untouched."""
     tracker = Tracker.objects.get(slug=slug)
     changed = []
     if subject is not None:
         tracker.subject = kinds.get(tracker.kind).validate_subject(subject)
+        tracker.save(update_fields=["subject"])
+        _sync_jobs(tracker, _cadence_of(tracker) or "weekly")
         changed.append("subject")
     if brief is not None:
         if not brief.strip():

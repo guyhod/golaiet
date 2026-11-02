@@ -3,8 +3,8 @@
 A kind owns the shape of a tracker's subject, of its observations' payload and
 of its assessments' state; its ordered LEVELS (coolest first); the prompts that
 collect and judge for it; the rule that turns a new assessment into an alert
-(alert_for); and the jobs a new tracker of that kind gets. Adding a kind is a
-code change; adding a tracker of an existing kind is rows."""
+(alert_for); and the jobs a tracker of that kind gets, from its subject (jobs).
+Adding a kind is a code change; adding a tracker of an existing kind is rows."""
 from importlib import import_module
 
 NAMES = ("topic", "country_risk", "stock")

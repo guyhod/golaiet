@@ -89,6 +89,49 @@ def test_the_prompt_names_the_lenses_and_the_heats_on_file():
         country_risk.research_prompt(tracker, None, lens="antisemitism")
 
 
+def test_the_desk_follows_named_lenses_and_tags_its_items():
+    assert country_risk.validate_subject({"iso3": "isr", "desk": ["security", "political_stability", "security"]})["desk"] == ["security", "political_stability"]
+    with pytest.raises(ValueError, match="subject.desk lenses must be among"):
+        country_risk.validate_subject({"iso3": "isr", "desk": ["weather"]})
+    assert "desk" not in country_risk.validate_subject({"iso3": "isr", "desk": []})
+    assert country_risk.validate_payload({"title": "Reuters", "lens": "security"})
+    with pytest.raises(ValueError, match="payload.lens must be one of"):
+        country_risk.validate_payload({"lens": "crime"})
+    assert [job["kind"] for job in country_risk.jobs({"iso3": "ISR", "desk": ["security"]})] == ["assess", "collect"]
+    assert [job["kind"] for job in country_risk.jobs({"iso3": "FRA"})] == ["assess"]
+
+
+def test_the_desk_prompt_and_the_brief_that_reads_its_leads():
+    tracker = SimpleNamespace(subject={"name": "Israel", "iso3": "ISR", "desk": ["security", "political_stability"]},
+                              title="Israel", slug="isr", brief="Guy lives here.")
+    item = SimpleNamespace(observed_at=date(2026, 11, 1), source_url="https://reuters.example/coalition",
+                           summary="No bloc reached 61 seats.", payload={"title": "Reuters", "lens": "political_stability"})
+    page = SimpleNamespace(observed_at=date(2026, 10, 26), source_url="https://reuters.example/bg", summary="Background.", payload={"title": "Reuters"})
+    prompt = country_risk.collect_prompt(tracker, [item, page])
+    assert "daily news desk for Israel" in prompt and "- security:" in prompt and "- political_stability:" in prompt
+    assert "- islam:" not in prompt and "[political_stability] https://reuters.example/coalition" in prompt
+    assert "https://reuters.example/bg" not in prompt and f"At most {country_risk.MAX_DESK_ITEMS_PER_LENS} items per lens" in prompt
+    with pytest.raises(ValueError, match="no desk lenses"):
+        country_risk.collect_prompt(SimpleNamespace(subject={"name": "France", "iso3": "FRA"}, title="France", slug="fra", brief="."), [])
+    brief = country_risk.research_prompt(tracker, None, leads=[item])
+    assert "Leads from the daily desk" in brief and "No bloc reached 61 seats." in brief
+    assert "Leads from the daily desk" not in country_risk.research_prompt(tracker, None)
+
+
+@pytest.mark.django_db
+def test_a_desk_on_the_subject_adds_and_removes_the_daily_session(monkeypatch):
+    monkeypatch.setenv("GOLAIET_MESSAGE_ID", "")
+    tools.create_tracker("isr", "Israel", "country_risk", {"iso3": "isr"}, "Guy lives here.", "weekly")
+    assert list(Job.objects.filter(tracker__slug="isr").values_list("name", flat=True)) == ["assess:isr"]
+    updated = tools.update_tracker("isr", subject={"iso3": "ISR", "desk": ["security", "political_stability", "internal_stability"]})
+    assert updated["subject"]["desk"] == ["security", "political_stability", "internal_stability"]
+    desk = Job.objects.get(name="collect:isr")
+    assert desk.schedule == "30 6 * * *" and desk.target == "agent.flows.collect.run" and desk.kind == "collect"
+    assert Job.objects.get(name="assess:isr").schedule == "0 7 * * mon"
+    tools.update_tracker("isr", subject={"iso3": "ISR"})
+    assert not Job.objects.filter(name="collect:isr").exists() and Job.objects.filter(name="assess:isr").exists()
+
+
 @pytest.mark.django_db
 def test_country_tracker_gets_a_research_job_and_alerts_on_heat(monkeypatch):
     monkeypatch.setenv("GOLAIET_MESSAGE_ID", "")

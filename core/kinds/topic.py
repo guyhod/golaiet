@@ -29,10 +29,14 @@ STATE_SCHEMA = {
 # The collect job runs at the cadence of the request ("weekly"); the judge runs
 # weekly an hour after the Monday collect, so the week's findings are filed first.
 ASSESS_SCHEDULE = "0 8 * * mon"
-DEFAULT_JOBS = (
+JOBS = (
     {"kind": "collect", "target": "agent.flows.collect.run"},
     {"kind": "assess", "target": "agent.flows.assess.run", "schedule": ASSESS_SCHEDULE},
 )
+
+
+def jobs(subject: dict) -> tuple[dict, ...]:
+    return JOBS
 
 MAX_NEW_OBSERVATIONS_PER_RUN = 10
 

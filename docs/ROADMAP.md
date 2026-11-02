@@ -82,6 +82,12 @@ Left out, as agreed: place markers on the globe (conflicts carry their place
 in the record), the conflict map's old records (not imported), and the ask
 box (Telegram is the ask box).
 
+Israel's news desk, 2026-11-02: a country whose subject names desk lenses gets
+a daily 06:30 session that files the day's items tagged by lens, the Monday
+brief reads them as leads, and the News screen shows them as War (security)
+and Politics (political and internal stability). Israel only for now, on
+Guy's call; the desk is a subject field so a second country is rows.
+
 ## Phase 3: stocks
 
 Build: `kinds/stock` with a deterministic collect script (Yahoo batch

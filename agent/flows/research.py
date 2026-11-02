@@ -23,7 +23,11 @@ def run(job, run, lens: str | None = None) -> dict:
     if tracker.status != Tracker.Status.ACTIVE:
         return {"summary": f"skipped: tracker is {tracker.status}"}
     previous = tracker.assessments.order_by("-at").first()
-    prompt = kinds.get(tracker.kind).research_prompt(tracker, previous, lens)
+    kind_module = kinds.get(tracker.kind)
+    leads = tracker.observations.filter(payload__has_key="lens").order_by("-observed_at")
+    if previous:
+        leads = leads.filter(observed_at__gt=previous.at)
+    prompt = kind_module.research_prompt(tracker, previous, lens, leads=leads[:kind_module.MAX_LEADS_IN_BRIEF])
     result = ClaudeRunner().run(prompt, system_prompt=RESEARCH_SYSTEM_PROMPT, allowed_tools=ALLOWED_TOOLS,
                                 tools=TOOLS, env={"GOLAIET_JOB_RUN_ID": run.pk})
     filed = Observation.objects.filter(job_run=run).count()

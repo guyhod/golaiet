@@ -25,7 +25,11 @@ STATE_SCHEMA = {"level": (str, True), "price": (float, True), "good_below": (flo
 TICKER_RE = re.compile(r"^[A-Z][A-Z0-9.\-]{0,9}$")
 
 # News only; the ticks come from one shared job (seed_jobs: `prices`).
-DEFAULT_JOBS = ({"kind": "collect", "target": "agent.flows.collect.run"},)
+JOBS = ({"kind": "collect", "target": "agent.flows.collect.run"},)
+
+
+def jobs(subject: dict) -> tuple[dict, ...]:
+    return JOBS
 
 
 def validate_subject(subject: dict) -> dict:

@@ -154,3 +154,13 @@ main.full > .globe { flex: 1; height: auto; min-height: 0; }
 .stock .price-figures { margin: 0; }
 .stock .figure { font-size: 2rem; }
 .stock .chart { flex: none; min-height: 11rem; height: 11rem; }
+
+/* The news room: a desk per country, War and Politics side by side, items by day. */
+.news { display: flex; flex-direction: column; gap: 2rem; }
+.desk h1 { font-size: 1.6rem; margin-bottom: 0.8rem; }
+.desk .columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(24rem, 1fr)); gap: 1.4rem; }
+.desk h2 { font-size: 1.1rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 0.6rem; }
+.desk .day h3 { font-size: 0.9rem; color: var(--muted); margin: 0.8rem 0 0.3rem; }
+.desk .item { background: var(--panel); border: 1px solid var(--line); border-radius: 0.5rem; padding: 0.7rem 0.9rem; margin-bottom: 0.5rem; }
+.desk .item p { margin: 0 0 0.3rem; line-height: 1.4; }
+.desk .item a { color: var(--muted); text-decoration: underline; }

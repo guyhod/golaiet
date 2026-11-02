@@ -64,12 +64,14 @@ SUBJECT_SCHEMA = {
     "iso3": (str, True),
     "name": (str, False),       # filled from the ISO list
     "numeric": (str, False),    # filled from the ISO list: the id the globe's polygons carry
+    "desk": (list, False),      # lenses a daily news desk follows; Israel's since 2026-11-02 (security, politics)
 }
 
-# An observation is one source the research session used.
+# An observation is one source the research session used, or one item the desk filed.
 PAYLOAD_SCHEMA = {
     "title": (str, False),
     "undated": (bool, False),   # the page shows no date; observed_at is then the day it was read
+    "lens": (str, False),       # desk items only: the lens the item bears on
 }
 
 STATE_SCHEMA = {
@@ -95,7 +97,18 @@ LENS_SCHEMA = {
 # Longer text is rejected, not cut: the prompt states the limits, so it is the agent breaking them.
 TEXT_LIMITS = {"summary": 300, "peace_score_reason": 300}
 
-DEFAULT_JOBS = ({"kind": "assess", "target": "agent.flows.research.run"},)
+RESEARCH_JOB = {"kind": "assess", "target": "agent.flows.research.run"}
+# The desk files before the 07:00 brief so Monday's judgment reads the morning's items, and ahead of
+# the Monday pile-up: on 2026-11-02 the 38 briefs filled the scheduler's workers and 22 sessions
+# queued at 07:00 were dropped when their grace ran out.
+DESK_JOB = {"kind": "collect", "target": "agent.flows.collect.run", "schedule": "30 6 * * *"}
+MAX_DESK_ITEMS_PER_LENS = 3
+MAX_LEADS_IN_BRIEF = 40
+
+
+def jobs(subject: dict) -> tuple[dict, ...]:
+    """The weekly brief for every country; a daily desk for a country whose subject names desk lenses."""
+    return (RESEARCH_JOB, DESK_JOB) if subject.get("desk") else (RESEARCH_JOB,)
 
 
 def country(iso3: str):
@@ -110,11 +123,22 @@ def validate_subject(subject: dict) -> dict:
     validate(subject, SUBJECT_SCHEMA, "subject")
     found = country(subject["iso3"])
     # The common name where ISO has one ('Iran', not 'Iran, Islamic Republic of').
-    return {"iso3": found.alpha_3, "name": getattr(found, "common_name", found.name), "numeric": found.numeric}
+    filled = {"iso3": found.alpha_3, "name": getattr(found, "common_name", found.name), "numeric": found.numeric}
+    desk = subject.get("desk")
+    if desk:
+        unknown = [lens for lens in desk if lens not in LENSES]
+        if unknown:
+            raise ValueError(f"subject.desk lenses must be among {', '.join(LENSES)}, got {', '.join(map(str, unknown))}")
+        filled["desk"] = list(dict.fromkeys(desk))
+    return filled
 
 
 def validate_payload(payload: dict) -> dict:
-    return validate(payload, PAYLOAD_SCHEMA, "payload")
+    validate(payload, PAYLOAD_SCHEMA, "payload")
+    lens = payload.get("lens")
+    if lens is not None and lens not in LENSES:
+        raise ValueError(f"payload.lens must be one of {', '.join(LENSES)}, got {lens!r}")
+    return payload
 
 
 def _limited(values: dict, label: str) -> None:
@@ -210,12 +234,46 @@ def validate_state(state: dict, previous=None, test_today: date | None = None) -
 alert_for = level_change_alert
 
 
-def research_prompt(tracker, previous, lens: str | None = None) -> str:
+def collect_prompt(tracker, recent_observations) -> str:
+    """The daily desk: the day's news on the desk lenses only, a few items each,
+    tagged with the lens they bear on. The brief judges once a week; between
+    briefs the desk is what the News screen shows and what the next brief reads
+    as leads. Guy asked for it on 2026-11-02 for Israel: coming war, and the
+    stability of its politics."""
+    name = tracker.subject["name"]
+    desk = tracker.subject.get("desk") or []
+    if not desk:
+        raise ValueError(f"{tracker.slug} has no desk lenses in its subject")
+    lens_lines = "\n".join(f"- {key}: {LENSES[key]}" for key in desk)
+    filed = "\n".join(f"- {observation.observed_at:%Y-%m-%d} [{observation.payload.get('lens')}] {observation.source_url}: "
+                      f"{observation.summary}"
+                      for observation in recent_observations if observation.payload.get("lens")) or "- (none yet)"
+    return "\n\n".join([
+        f"You are the daily news desk for {name} (tracker \"{tracker.title}\", slug: {tracker.slug}).",
+        f"Standing brief:\n{tracker.brief}",
+        f"The desk follows these lenses and no others:\n{lens_lines}",
+        f"Already filed (do not file these again):\n{filed}",
+        f"Search the web for today's and yesterday's news on each lens in {name}, at least one search per lens with the "
+        "country and the lens's subject in the query. Keep only what a reader of that lens needs today: a development, "
+        "a decision, a dated event, a figure. Skip commentary, repeats of what is filed, and anything older than a week.",
+        f"For each item kept, call record_observation once: slug, observed_at = the item's publication date or time, "
+        "source_url, a one-or-two-sentence summary in your own words that says what happened and what it indicates for "
+        "the lens, and payload {\"title\": the page title, \"lens\": the lens key}. At most "
+        f"{MAX_DESK_ITEMS_PER_LENS} items per lens, the ones that matter most. Prefer primary and reputable sources "
+        "(government, Reuters, AP, major national press). Never invent facts, dates or URLs.",
+        "If nothing new was found on a lens, file nothing for it and say so. Finish with one short paragraph: what you "
+        "filed per lens and what you skipped.",
+    ])
+
+
+def research_prompt(tracker, previous, lens: str | None = None, leads=()) -> str:
     """The weekly brief judges all six lenses in one pass of at most MAX_SEARCHES
     searches, about two per lens; `lens` turns the run into a study of that one
     lens with every search spent on it, the other five carried over from the
     record on file. Guy asked for the first on 2026-10-28, Portugal on
-    antisemitism, which the pass had judged on a single page."""
+    antisemitism, which the pass had judged on a single page. `leads` are the
+    desk's items since the previous judgment, so a country with a desk is judged
+    on a week of traced news and not on two searches."""
     name, iso3 = tracker.subject["name"], tracker.subject["iso3"]
     heat_lines = "\n".join(f"- {heat}: {definition}" for heat, definition in HEAT_DEFINITIONS.items())
     lens_lines = "\n".join(f"- {key}: {definition}" for key, definition in LENSES.items())
@@ -243,11 +301,17 @@ def research_prompt(tracker, previous, lens: str | None = None) -> str:
         search_brief = (f"Search the web for the latest, up to {MAX_SEARCHES} searches, all on {lens} in {name} from different "
                         "angles: incidents of the last 30 days and of the last 12 months, community and watchdog reports, "
                         "official statistics, and the state's response (police, prosecutors, courts, government).")
-    return "\n\n".join([
+    lead_lines = "\n".join(f"- {item.observed_at:%Y-%m-%d} [{item.payload.get('lens')}] {item.source_url}: {item.summary}"
+                           for item in leads)
+    leads_brief = ("" if not lead_lines else
+                   "Leads from the daily desk since the previous judgment, already filed as observations; judge their "
+                   f"lenses on them too, citing their ids, and search for what they miss:\n{lead_lines}")
+    return "\n\n".join(part for part in [
         f"Research {name} ({iso3}) for the tracker \"{tracker.title}\" (slug: {tracker.slug}).",
         f"Standing brief:\n{tracker.brief}",
         previous_line,
         lens_brief,
+        leads_brief,
         search_brief + " A search whose results are all older than 30 days is not a finding, it is a stale index: search "
         "again with different words in extended mode before concluding anything. Open the page a heat rests on; a calm lens "
         "needs an opened page from the last 30 days that covers the subject and shows nothing happening. Prefer primary and "
@@ -279,4 +343,4 @@ def research_prompt(tracker, previous, lens: str | None = None) -> str:
         ("Finish with one line: the peace score, the level, and the change since the previous judgment in a few words."
          if lens is None else f"Refresh the peace score, its reason, the overview and the outlook only where {lens} changes "
          f"them. Finish with one line: the {lens} heat and what changed since the record on file."),
-    ])
+    ] if part)
