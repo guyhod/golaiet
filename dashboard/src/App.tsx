@@ -75,6 +75,7 @@ export function App() {
           {health ? `heartbeat ${formatWhen(health.last_heartbeat)}` : "connecting…"}
           {refreshedAt ? ` · screen ${formatWhen(refreshedAt.toISOString())}` : ""}
         </span>
+        <a className="admin-link muted" href="/admin/">Admin</a>
         {focus?.note && open && <span className="note">{focus.note}</span>}
       </header>
 

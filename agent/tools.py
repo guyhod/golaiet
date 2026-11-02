@@ -34,7 +34,7 @@ def _tracker_dict(tracker: Tracker) -> dict:
     judged = tracker.assessments.order_by("-at").first()
     return {
         "slug": tracker.slug, "title": tracker.title, "kind": tracker.kind, "status": tracker.status,
-        "subject": tracker.subject, "cadence": _cadence_of(tracker),
+        "subject": tracker.subject, "cadence": cadence_of(tracker),
         "observations": tracker.observations.count(),
         "latest_observation_at": latest.observed_at.isoformat() if latest else None,
         "latest_assessment": _assessment_dict(judged) if judged else None,
@@ -73,7 +73,7 @@ def _cadence_jobs(tracker: Tracker):
     return tracker.jobs.filter(schedule__in=list(kinds.CADENCES.values()))
 
 
-def _cadence_of(tracker: Tracker) -> str | None:
+def cadence_of(tracker: Tracker) -> str | None:
     job = _cadence_jobs(tracker).first() or tracker.jobs.first()
     if job is None:
         return None
@@ -94,19 +94,23 @@ def _parse_when(value: str, label: str) -> datetime:
     return parsed
 
 
-def _sync_jobs(tracker: Tracker, cadence: str) -> list[dict]:
-    """The tracker's jobs as its kind derives them from the subject: missing ones are
-    created at the cadence (or the spec's own schedule), ones the subject no longer
-    calls for are deleted (a country whose desk is dropped loses the daily session)."""
+def sync_jobs(tracker: Tracker, cadence: str) -> list[dict]:
+    """The tracker's jobs as its kind derives them from the subject, at the cadence:
+    missing ones are created (at the cadence, or the spec's own schedule), ones the
+    subject no longer calls for are deleted (a country whose desk is dropped loses
+    the daily session), and the ones that follow the cadence word move to it. The
+    agent's create and update tools and the admin's tracker form all go through here."""
+    if cadence not in kinds.CADENCES:
+        raise ValueError(f"cadence must be one of {', '.join(kinds.CADENCES)}")
     wanted = {f"{spec['kind']}:{tracker.slug}": spec for spec in kinds.get(tracker.kind).jobs(tracker.subject)}
     tracker.jobs.exclude(name__in=wanted).delete()
-    jobs = []
     for name, spec in wanted.items():
-        job, _ = Job.objects.get_or_create(name=name, defaults=dict(
+        Job.objects.get_or_create(name=name, defaults=dict(
             kind=spec["kind"], tracker=tracker, trigger=Job.Trigger.CRON,
             schedule=spec.get("schedule") or kinds.CADENCES[cadence], target=spec["target"]))
-        jobs.append({"name": job.name, "schedule": job.schedule, "first_run_at": _next_fire(job.schedule)})
-    return jobs
+    _cadence_jobs(tracker).update(schedule=kinds.CADENCES[cadence])
+    return [{"name": job.name, "schedule": job.schedule, "first_run_at": _next_fire(job.schedule)}
+            for job in tracker.jobs.order_by("name")]
 
 
 def _next_fire(crontab: str) -> str:
@@ -149,7 +153,7 @@ def create_tracker(slug: str, title: str, kind: str, subject: dict, brief: str, 
         raise ValueError("brief must not be empty")
     tracker = Tracker.objects.create(slug=slug, title=title, kind=kind, subject=subject, brief=brief.strip(),
                                      view=kind_module.VIEW, created_by_message_id=_message_id())
-    jobs = _sync_jobs(tracker, cadence)
+    jobs = sync_jobs(tracker, cadence)
     return dict(_tracker_dict(tracker), jobs=jobs)
 
 
@@ -162,7 +166,6 @@ def update_tracker(slug: str, brief: str | None = None, cadence: str | None = No
     changed = []
     if subject is not None:
         tracker.subject = kinds.get(tracker.kind).validate_subject(subject)
-        _sync_jobs(tracker, _cadence_of(tracker) or "weekly")
         changed.append("subject")
     if brief is not None:
         if not brief.strip():
@@ -177,9 +180,10 @@ def update_tracker(slug: str, brief: str | None = None, cadence: str | None = No
     if cadence is not None:
         if cadence not in kinds.CADENCES:
             raise ValueError(f"cadence must be one of {', '.join(kinds.CADENCES)}")
-        _cadence_jobs(tracker).update(schedule=kinds.CADENCES[cadence])
         changed.append("cadence")
     tracker.save()
+    if subject is not None or cadence is not None:
+        sync_jobs(tracker, cadence or cadence_of(tracker) or "weekly")
     return dict(_tracker_dict(tracker), changed=changed)
 
 

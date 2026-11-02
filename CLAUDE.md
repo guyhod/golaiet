@@ -44,6 +44,7 @@ style in `/Users/guyhod/Kruv/CLAUDE.md` apply here in full.
 ```bash
 cp .env.template .env            # fill in: DB_PASSWORD, TELEGRAM_*, CLAUDE_CODE_OAUTH_TOKEN
 make stack                       # the whole thing: db, migrate, web, scheduler, dashboard on 8003
+                                 # admin at http://127.0.0.1:8003/admin/, no login: the stack listens on the Mac alone
 make logs
 
 # Host dev instead (stop the compose scheduler first: two pollers on one bot conflict)

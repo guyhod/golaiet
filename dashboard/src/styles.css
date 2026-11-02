@@ -42,6 +42,8 @@ p { margin: 0.3rem 0; line-height: 1.4; }
 .tabs { display: flex; gap: 0.3rem; }
 .tabs button { padding: 0.2rem 0.8rem; border: 1px solid var(--line); border-radius: 0.3rem; color: var(--muted); }
 .tabs button.on { color: var(--text); border-color: var(--text); }
+.bar .admin-link { margin-inline-start: auto; text-decoration: none; }
+.bar .admin-link:hover { color: var(--text); }
 .note { margin-left: auto; color: var(--muted); font-style: italic; }
 .muted { color: var(--muted); }
 .small { font-size: 0.85rem; }

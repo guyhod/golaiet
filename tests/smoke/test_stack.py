@@ -39,7 +39,7 @@ def test_dashboard_serves_the_built_app(http):
 
 
 def test_admin_and_its_static_files_are_proxied(http):
-    assert "Django administration" in http.get("/admin/login/").raise_for_status().text
+    assert "Site administration" in http.get("/admin/").raise_for_status().text
     assert "text/css" in http.get("/static/admin/css/base.css").raise_for_status().headers["content-type"]
 
 

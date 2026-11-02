@@ -5,7 +5,7 @@ import logging
 from chat import alerts, telegram
 from chat.models import Message
 from agent.flows import outcome
-from agent.prompts import REPLY_SYSTEM_PROMPT
+from agent.prompts import REPLY_SYSTEM_PROMPT as SYSTEM_PROMPT
 from agent.runner import ClaudeRunner
 
 log = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ def run(job, run, *, message_id: int) -> dict:
     message.save(update_fields=["job_run"])
 
     result = ClaudeRunner().run(
-        message.text, system_prompt=REPLY_SYSTEM_PROMPT, allowed_tools=ALLOWED_TOOLS, tools=TOOLS,
+        message.text, system_prompt=SYSTEM_PROMPT, allowed_tools=ALLOWED_TOOLS, tools=TOOLS,
         resume=conversation.session_id or None,
         env={"GOLAIET_JOB_RUN_ID": run.pk, "GOLAIET_MESSAGE_ID": message.pk},
     )

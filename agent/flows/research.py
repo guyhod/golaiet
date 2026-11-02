@@ -8,7 +8,7 @@ from chat import alerts
 from core import kinds
 from core.models import Assessment, Observation, Tracker
 from agent.flows import outcome, tracker_of
-from agent.prompts import RESEARCH_SYSTEM_PROMPT
+from agent.prompts import RESEARCH_SYSTEM_PROMPT as SYSTEM_PROMPT
 from agent.runner import ClaudeRunner
 
 ALLOWED_TOOLS = ["mcp__golaiet__record_observation", "mcp__golaiet__record_assessment", "mcp__golaiet__raise_alert",
@@ -16,18 +16,22 @@ ALLOWED_TOOLS = ["mcp__golaiet__record_observation", "mcp__golaiet__record_asses
 TOOLS = ["WebSearch", "WebFetch"]
 
 
-def run(job, run, lens: str | None = None) -> dict:
-    """`lens` (off schedule, from manage.py research) narrows the session to one lens studied in depth."""
-    tracker = tracker_of(job)
-    if tracker.status != Tracker.Status.ACTIVE:
-        return {"summary": f"skipped: tracker is {tracker.status}"}
+def prompt(tracker: Tracker, lens: str | None = None) -> str:
+    """The prompt the next run would get: the record on file and the desk's leads since it."""
     previous = tracker.assessments.order_by("-at").first()
     kind_module = kinds.get(tracker.kind)
     leads = tracker.observations.filter(payload__has_key="lens").order_by("-observed_at")
     if previous:
         leads = leads.filter(observed_at__gt=previous.at)
-    prompt = kind_module.research_prompt(tracker, previous, lens, leads=leads[:kind_module.MAX_LEADS_IN_BRIEF])
-    result = ClaudeRunner().run(prompt, system_prompt=RESEARCH_SYSTEM_PROMPT, allowed_tools=ALLOWED_TOOLS,
+    return kind_module.research_prompt(tracker, previous, lens, leads=leads[:kind_module.MAX_LEADS_IN_BRIEF])
+
+
+def run(job, run, lens: str | None = None) -> dict:
+    """`lens` (off schedule, from manage.py research) narrows the session to one lens studied in depth."""
+    tracker = tracker_of(job)
+    if tracker.status != Tracker.Status.ACTIVE:
+        return {"summary": f"skipped: tracker is {tracker.status}"}
+    result = ClaudeRunner().run(prompt(tracker, lens), system_prompt=SYSTEM_PROMPT, allowed_tools=ALLOWED_TOOLS,
                                 tools=TOOLS, env={"GOLAIET_JOB_RUN_ID": run.pk})
     filed = Observation.objects.filter(job_run=run).count()
     recorded = Assessment.objects.filter(job_run=run).count()
