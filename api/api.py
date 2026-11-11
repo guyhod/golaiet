@@ -84,8 +84,10 @@ def tracker_detail(request, slug: str, limit: int = 50, sourced: bool = False):
     recent = tracker.observations.order_by("-observed_at")
     if sourced:
         recent = recent.exclude(source_url="")
-    recent = recent[:max(1, min(limit, 500))]
-    judged = tracker.assessments.order_by("-at")[:10]
+    limit = max(1, min(limit, 500))
+    recent = recent[:limit]
+    # Assessments follow the same limit: a lane's drawer reads which facts each change cited.
+    judged = tracker.assessments.order_by("-at")[:limit]
     return dict(_tracker(tracker), brief=tracker.brief,
                 recent_assessments=[_assessment(assessment) for assessment in judged],
                 recent_observations=[_observation(observation) for observation in recent])

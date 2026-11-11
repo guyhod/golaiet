@@ -408,6 +408,13 @@ the wall beside the vault's page shows the same lanes, stations and states
 and the same panel content. The map is identical by construction; the
 restyled panels are checked by eye.
 
+**Built 2026-11-11, exit check open.** The screen is the fifth tab and
+`/life` is the wall; `make check` (110 pytest, 37 Vitest) and `make e2e`
+(7 of 7, three of them the Life scenario) are green. Rendered once against
+the real board on a scratch database: the map, the panels and the drawer
+draw. The exit check is Guy's eye on `/life` beside the vault's page after
+the import. This is not the step's line.
+
 ### Step 4 — Friday in Telegram (½–1 evening)
 
 §3.6.

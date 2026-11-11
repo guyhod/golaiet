@@ -176,3 +176,136 @@ main.full > .globe { flex: 1; height: auto; min-height: 0; }
 .desk .item { background: var(--panel); border: 1px solid var(--line); border-radius: 0.5rem; padding: 0.6rem 0.9rem; margin-bottom: 0.4rem; }
 .desk .item p { margin: 0 0 0.3rem; line-height: 1.45; }
 .desk .item a { color: var(--muted); text-decoration: underline; }
+
+/* The Life screen. Its parts are sized in px, not rem: on a wide window it is a fixed 1920×1080 canvas
+   scaled to fit, and the map inside it is SVG with px geometry. Its colours are its own tokens (the map's
+   palette, views/life/palette.ts); the app's --muted is a text colour and is left alone. */
+.life {
+  --life-page: #0d0d0d; --life-panel: #1a1a19; --life-line: rgba(255, 255, 255, 0.1); --life-ink: #ffffff;
+  --life-ink2: #c3c2b7; --life-dim: #898781; --life-grid: #2c2c2a; --life-axis: #383835;
+  --life-good: #0ca30c; --life-warn: #fab219; --life-crit: #d03b3b; --life-current: #3987e5;
+  flex: 1; min-height: 0; position: relative; background: var(--life-page); color: var(--life-ink);
+  font-size: 14px; line-height: 1.25;
+}
+.life.fit { overflow: hidden; }
+.life.flow { display: flex; flex-direction: column; gap: 12px; padding: 16px; overflow-y: auto; }
+/* The page scrolls; its sections keep their own height instead of shrinking to share one screen. */
+.life.flow > * { flex: none; }
+.life .canvas { width: 1920px; height: 1080px; transform-origin: top left; position: relative; }
+.life .wall-grid { display: grid; height: 100%; gap: 10px; padding: 14px 22px; grid-template-columns: 1fr 560px;
+  grid-template-rows: 88px 186px 32px 1fr 28px;
+  grid-template-areas: "head head" "burning focus" "horizon horizon" "map next" "legend legend"; }
+.life .wall-head { display: grid; grid-template-columns: 350px 1fr; align-items: center; gap: 16px; }
+.life ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; align-content: start; }
+.life h2 { font-size: 22px; font-weight: 700; line-height: 1.15; margin: 4px 0 0; }
+.life h3 { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 11.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.14em; color: var(--life-dim); }
+.life .card { background: var(--life-panel); border: 1px solid var(--life-line); border-radius: 12px; }
+.life .none { color: var(--life-dim); font-size: 14px; margin: 0; }
+.life .link:hover { color: var(--life-ink); text-decoration: underline; }
+
+.life .date { font-size: 24px; font-weight: 700; line-height: 1.1; white-space: nowrap; }
+.life .date span { font-weight: 400; color: var(--life-dim); }
+.life .updated { margin-top: 6px; color: var(--life-ink2); }
+
+.life .pulse-row { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 10px; }
+.life .pulse-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+.life .pulse { display: flex; flex-direction: column; gap: 3px; padding: 9px 12px; background: var(--life-page);
+  border-top: 3px solid var(--state-colour); min-width: 0; }
+.life .pulse:hover { background: var(--life-grid); }
+.life .pulse.selected { outline: 1px solid var(--life-ink2); }
+.life .pulse-label { font-size: 12.5px; color: var(--life-ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.life .pulse-label b { color: var(--state-colour); font-size: 14px; }
+.life .pulse-count { font-size: 13px; color: var(--life-ink2); line-height: 1; }
+.life .pulse-count b, .life .practice-count b { font-size: 26px; font-weight: 700; color: var(--state-colour); font-variant-numeric: tabular-nums; }
+.life .practice-count { margin: 8px 0; color: var(--life-ink2); }
+.life .practice-count b { font-size: 34px; }
+.life .pulse-sub { font-size: 11px; color: var(--life-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.life .state-good { --state-colour: var(--life-good); }
+.life .state-warn { --state-colour: var(--life-warn); }
+.life .state-bad { --state-colour: var(--life-crit); }
+.life .dots { display: flex; gap: 3px; margin: 3px 0; }
+.life .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--life-grid); }
+.life .dot-ok { background: var(--life-good); }
+.life .dot-bad { background: var(--life-crit); }
+
+.life .panel { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; overflow: hidden; }
+.life .panel.burning { border-color: rgba(208, 59, 59, 0.45); }
+.life .panel.burning > h3 { color: var(--life-crit); }
+.life .panel.focus { border-color: rgba(250, 178, 25, 0.45); }
+.life .panel.focus > h3 { color: var(--life-warn); }
+.life .panel.next > h3.passed { color: var(--life-good); margin-top: 6px; }
+.life .panel.next > h3 .pill { margin-left: auto; }
+.life .row { display: flex; align-items: flex-start; gap: 12px; width: 100%; border-radius: 6px; }
+.life button.row:hover { background: var(--life-grid); }
+.life .row-text { display: flex; flex-direction: column; min-width: 0; }
+.life .row-title { font-size: 18.5px; font-weight: 700; line-height: 1.15; }
+.life .row-detail { margin-top: 2px; font-size: 13px; color: var(--life-ink2); }
+.life .row-detail b { color: var(--life-ink); }
+.life .path, .life .source { color: var(--life-dim); font-size: 12.5px; }
+.life .badge-number { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--life-crit); display: flex;
+  align-items: center; justify-content: center; font-size: 15px; font-weight: 800; }
+.life .star { flex: none; font-size: 20px; line-height: 1.1; color: var(--life-warn); text-shadow: 0 0 10px rgba(250, 178, 25, 0.7); }
+.life .ring { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--life-dim); color: var(--life-dim);
+  display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; }
+.life .ring.hot { border-color: var(--life-crit); color: var(--life-crit); }
+.life .next-text { font-size: 16.5px; font-weight: 600; line-height: 1.2; }
+.life .trail-date { flex: none; width: 52px; font-size: 12.5px; font-weight: 700; color: var(--life-good); }
+.life .trail-label { font-size: 15px; font-weight: 500; color: var(--life-ink2); }
+
+.life .horizon { display: flex; align-items: center; gap: 20px; padding: 0 16px; overflow: hidden; }
+.life .horizon > h3 { white-space: nowrap; }
+.life .horizon-days { display: flex; align-items: center; gap: 20px; min-width: 0; white-space: nowrap; font-size: 14.5px; color: var(--life-ink2); }
+.life .horizon-day { display: flex; align-items: center; gap: 6px; }
+.life .horizon-day.dimmed { opacity: 0.4; }
+.life.flow .horizon, .life.flow .horizon-days { flex-wrap: wrap; row-gap: 6px; white-space: normal; }
+.life.flow .horizon { padding: 8px 16px; }
+
+.life .pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.life .pill { display: inline-flex; align-items: center; padding: 2px 8px; border: 1px solid var(--life-line); border-radius: 999px;
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; color: var(--life-dim); }
+.life .pill-passed { background: var(--life-good); border-color: transparent; color: var(--life-ink); }
+.life .pill-current { background: var(--life-current); border-color: transparent; color: var(--life-ink); }
+.life .pill-crit { background: var(--life-crit); border-color: transparent; color: var(--life-ink); }
+.life .pill-warn { background: var(--life-warn); border-color: transparent; color: #111; }
+
+.life .map-card { padding: 10px 12px; overflow: hidden; }
+.life .map-card.scrolls { overflow-x: auto; }
+.life .legend-row { display: flex; align-items: center; gap: 16px; padding: 0 6px; white-space: nowrap; font-size: 12px; color: var(--life-dim); }
+.life.flow .legend-row { flex-wrap: wrap; }
+.life .legend-row > span { display: flex; align-items: center; gap: 6px; }
+.life .legend-row .quiet { margin-left: auto; }
+.life .mark { flex: none; display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--life-dim); background: var(--life-panel); }
+.life .mark-passed { background: var(--life-good); border-color: var(--life-good); }
+.life .mark-current { border: 2.5px solid var(--life-current); }
+.life .mark-proposed { border-style: dashed; background: none; }
+.life .mark-decision, .life .mark-ref { border-color: var(--life-ink2); border-radius: 1px; transform: rotate(45deg); }
+.life .edge { display: inline-block; width: 22px; border-top: 2px solid var(--life-axis); }
+.life .edge-or { border-top-style: dashed; }
+
+.life .drawer { position: absolute; top: 14px; right: 22px; bottom: 14px; width: 600px; z-index: 6; display: flex; flex-direction: column;
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.6); }
+.life .drawer.sheet { position: fixed; inset: auto 0 0 0; width: auto; max-height: 80vh; border-radius: 16px 16px 0 0; }
+.life .drawer .close { position: absolute; top: 8px; right: 12px; color: var(--life-dim); font-size: 26px; line-height: 1; }
+.life .drawer-body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 40px 20px 20px; }
+.life .crumb { font-size: 12px; color: var(--life-dim); }
+.life .fields { display: grid; gap: 4px; margin-top: 12px; }
+.life .field { display: flex; gap: 12px; font-size: 13px; line-height: 1.35; }
+.life .field-name { flex: none; width: 74px; color: var(--life-dim); }
+.life .alarm { color: var(--life-crit); }
+.life .drawer-section { margin-top: 16px; }
+.life .drawer-section > h3 { margin-bottom: 8px; font-size: 11px; }
+.life .count { padding: 0 6px; border-radius: 999px; background: var(--life-grid); color: var(--life-ink2); font-size: 10px; letter-spacing: 0; }
+.life .track-caption { margin: 6px 0 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--life-dim); }
+.life .stations { gap: 4px; }
+.life .station-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 4px 6px; border-radius: 6px; font-size: 13.5px; }
+.life .station-row:hover { background: var(--life-grid); }
+.life .station-row.is-current .station-label { font-weight: 700; }
+.life .station-row.is-proposed .station-label, .life .station-row.is-ref .station-label { color: var(--life-dim); }
+.life .station-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.life .station-when { flex: none; font-size: 11px; color: var(--life-dim); }
+.life .history { gap: 6px; }
+.life .history li { display: flex; gap: 8px; padding: 8px 12px; border: 1px solid var(--life-line); border-radius: 8px; background: var(--life-page);
+  font-size: 13.5px; line-height: 1.3; color: var(--life-ink2); overflow-wrap: anywhere; }
+.life .history-day { flex: none; width: 52px; font-size: 12px; font-weight: 700; color: var(--life-good); }
+.life .history li.retracted { opacity: 0.5; text-decoration: line-through; }

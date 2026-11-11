@@ -10,8 +10,13 @@ same thing every time.
     Show me <title>                       set_focus on that tracker
     Show everything                       set_focus with no tracker
     Mark <title> <level>                  record_assessment at that level
+    Practice <title>                      create_tracker (practice kind, a gap)
+    Did <title>                           record_observation on the day the message was sent
+    Lane <title>: <station>               create_tracker (campaign kind), the fact, then the lane's first state
 
-Any other prompt (a collect or assess session) does nothing and says so."""
+Any other prompt (a collect or assess session) does nothing and says so. A
+script is a list of tool calls; a later call may use the id the one before
+it returned."""
 import argparse
 import json
 import os
@@ -27,13 +32,36 @@ def slug_of(title: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
 
 
-def decide(prompt: str) -> tuple[str | None, dict, str]:
-    """(tool, arguments, reply) for the prompt; tool None means answer only."""
+PREVIOUS_ID = "<the id the previous call returned>"
+
+
+def decide(prompt: str) -> tuple[str | None, dict, str] | tuple[list, str]:
+    """(tool, arguments, reply) for the prompt; tool None means answer only.
+    A script of several calls is ([(tool, arguments), ...], reply)."""
+    sent_day = ""
     if prompt.startswith("[Sent "):
         # The reply flow's first line says when the message was sent; the script is the rest.
+        sent_day = prompt.split()[2]
         prompt = prompt.partition("\n")[2]
     words = prompt.strip().split()
     head = " ".join(words[:2]).lower()
+    if words and words[0].lower() == "practice":
+        title = " ".join(words[1:])
+        return "create_tracker", {"slug": slug_of(title), "title": title, "kind": "practice",
+                                  "subject": {"color": "red", "started": sent_day},
+                                  "brief": "Any time it happens counts."}, f"{title} is a practice."
+    if words and words[0].lower() == "did":
+        title = " ".join(words[1:])
+        return "record_observation", {"slug": slug_of(title), "observed_at": sent_day, "source_url": "",
+                                      "summary": prompt.strip()}, f"Recorded {title}."
+    if words and words[0].lower() == "lane":
+        title, _, station = " ".join(words[1:]).partition(": ")
+        slug = slug_of(title)
+        return [("create_tracker", {"slug": slug, "title": title, "kind": "campaign", "subject": {}, "brief": f"The {title} lane."}),
+                ("record_observation", {"slug": slug, "observed_at": sent_day, "source_url": "", "summary": prompt.strip()}),
+                ("record_assessment", {"slug": slug, "reason": "Guy named the first station.", "evidence_ids": [PREVIOUS_ID],
+                                       "state": {"stations": [{"id": slug_of(station), "label": station, "track": "", "state": "current"}]}})], \
+            f"{title} is a lane."
     if words and words[0].lower() == "track" and "good below" in prompt.lower():
         ticker, line = words[1].strip(",").upper(), float(words[-1])
         return "create_tracker", {"slug": ticker.lower(), "title": ticker, "kind": "stock",
@@ -58,7 +86,8 @@ def decide(prompt: str) -> tuple[str | None, dict, str]:
     return None, {}, "Nothing to do."
 
 
-def call_tool(mcp_config_path: str, name: str, arguments: dict) -> str:
+def call_tool(mcp_config_path: str, name: str, arguments: dict) -> tuple[str, str]:
+    """(refusal, result): the refusal is empty when the tool answered."""
     server_spec = json.load(open(mcp_config_path))["mcpServers"]["golaiet"]
     env = dict(os.environ, **server_spec.get("env", {}))
     server = subprocess.Popen([server_spec["command"], *server_spec["args"]], cwd=server_spec.get("cwd"), env=env,
@@ -72,17 +101,17 @@ def call_tool(mcp_config_path: str, name: str, arguments: dict) -> str:
         "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "fake-claude", "version": "0"}}})
     send({"jsonrpc": "2.0", "method": "notifications/initialized"})
     send({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": name, "arguments": arguments}})
-    outcome = "the tool server closed the pipe without answering"
+    outcome, answered = "the tool server closed the pipe without answering", ""
     for line in server.stdout:
         message = json.loads(line)
         if message.get("id") == 2:
             result = message.get("result") or {"isError": True, "content": [{"type": "text", "text": str(message.get("error"))}]}
             text = "".join(part.get("text", "") for part in result.get("content", []))
-            outcome = f"The tool refused: {text}" if result.get("isError") else ""
+            outcome, answered = (f"The tool refused: {text}", "") if result.get("isError") else ("", text)
             break
     server.stdin.close()
     server.wait(timeout=10)
-    return outcome
+    return outcome, answered
 
 
 def main() -> int:
@@ -99,11 +128,19 @@ def main() -> int:
     parser.add_argument("prompt")
     args = parser.parse_args()
 
-    tool, arguments, reply = decide(args.prompt)
-    if tool and args.mcp_config:
-        refusal = call_tool(args.mcp_config, tool, arguments)
+    decided = decide(args.prompt)
+    calls, reply = decided if len(decided) == 2 else ([decided[:2]] if decided[0] else [], decided[2])
+    previous_id = None
+    for tool, arguments in calls if args.mcp_config else []:
+        arguments = json.loads(json.dumps(arguments).replace(json.dumps(PREVIOUS_ID), json.dumps(previous_id)))
+        refusal, answered = call_tool(args.mcp_config, tool, arguments)
         if refusal:
             reply = refusal
+            break
+        try:
+            previous_id = json.loads(answered).get("id")
+        except (ValueError, AttributeError):
+            previous_id = None
     print(json.dumps({"result": reply, "session_id": args.resume or str(uuid.uuid4()),
                       "total_cost_usd": 0, "is_error": False}))
     return 0

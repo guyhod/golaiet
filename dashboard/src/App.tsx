@@ -4,18 +4,24 @@ import type { Alert, Focus, Health, Tracker } from "./api";
 import { usePolled } from "./polled";
 import { Module } from "./Module";
 import { Globe } from "./views/Globe";
+import { Life, type Pushed } from "./views/life/Life";
 import { News } from "./views/News";
 import { Overview } from "./views/Overview";
 import { Stocks } from "./views/Stocks";
 import { viewFor } from "./views";
 
-/** The screen is the globe (the default), the stocks, the news room or the list of tiles; the
- *  bar switches them. A country tracker opens on the globe, its kind's view;
- *  any other tracker opens in its own view as a module over the screen. A focus event
- *  from a conversation opens or closes either, and so does a click on a tile. */
+/** The screen is the globe (the default), the stocks, the news room, Guy's life or the list of tiles; the
+ *  bar switches them. A country tracker opens on the globe and a practice or a campaign on the Life
+ *  screen, their kinds' views; any other tracker opens in its own view as a module over the screen. A
+ *  focus event from a conversation opens or closes either, and so does a click on a tile.
+ *
+ *  At /life the app is the wall: the Life screen alone, with no bar to leave it by. A focus pushed about
+ *  a tracker of another kind is ignored there, so a question about a stock never takes the wall away. */
 export type Open = { slug: string; view: string; params: Record<string, unknown> } | null;
-type Screen = "globe" | "stocks" | "news" | "list";
-const SCREENS: [Screen, string][] = [["globe", "Globe"], ["stocks", "Stocks"], ["news", "News"], ["list", "List"]];
+type Screen = "globe" | "stocks" | "news" | "life" | "list";
+const SCREENS: [Screen, string][] = [["globe", "Globe"], ["stocks", "Stocks"], ["news", "News"], ["life", "Life"], ["list", "List"]];
+const LIFE_VIEW = "campaign_map";
+const WALL = window.location.pathname.replace(/\/$/, "") === "/life";
 
 const ALERT_BANNER_HOURS = 24;
 
@@ -30,11 +36,18 @@ export function App() {
   const error = polledHealth.error ?? polledTrackers.error ?? polledAlerts.error;
   const [focus, setFocus] = useState<Focus | null>(null);
   const [open, setOpen] = useState<Open>(null);
-  const [screen, setScreen] = useState<Screen>("globe");
+  const [screen, setScreen] = useState<Screen>(WALL ? "life" : "globe");
   const [picked, setPicked] = useState<string | null>(null);
+  const [pushedLife, setPushedLife] = useState<Pushed | null>(null);
 
   const show = (slug: string | null, view: string, params: Record<string, unknown>) => {
-    if (slug && view === "globe") {
+    if (slug && view === LIFE_VIEW) {
+      setScreen("life");
+      setPushedLife({ slug, params, at: new Date().toISOString() });
+      setOpen(null);
+    } else if (WALL) {
+      return;
+    } else if (slug && view === "globe") {
       setScreen("globe");
       setPicked(slug);
       setOpen(null);
@@ -58,6 +71,25 @@ export function App() {
   );
   const view = open ? viewFor(open.view) : null;
 
+  const banners = (
+    <>
+      {health?.status === "stale" && (
+        <div className="banner stale">
+          No heartbeat since {formatWhen(health.last_heartbeat)}. The scheduler is not running; what you see may be old.
+        </div>
+      )}
+      {error && <div className="banner stale">Cannot reach the API: {error}</div>}
+    </>
+  );
+  if (WALL) {
+    return (
+      <div className="app">
+        {banners}
+        <Life wall pushed={pushedLife} />
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       <header className="bar">
@@ -79,12 +111,7 @@ export function App() {
         {focus?.note && open && <span className="note">{focus.note}</span>}
       </header>
 
-      {health?.status === "stale" && (
-        <div className="banner stale">
-          No heartbeat since {formatWhen(health.last_heartbeat)}. The scheduler is not running; what you see may be old.
-        </div>
-      )}
-      {error && <div className="banner stale">Cannot reach the API: {error}</div>}
+      {banners}
       {recentAlert && (
         <div className={`banner alert lvl-${levelRankOf(trackers, recentAlert)}`}>
           🔔 {recentAlert.text} <span className="muted">· {formatWhen(recentAlert.created_at)}</span>
@@ -97,8 +124,11 @@ export function App() {
         <main><Stocks trackers={trackers} onOpen={(tracker) => show(tracker.slug, tracker.view, {})} /></main>
       ) : screen === "news" ? (
         <main><News trackers={trackers} /></main>
+      ) : screen === "life" ? (
+        <Life wall={false} pushed={pushedLife} />
       ) : (
-        <main><Overview trackers={trackers} onOpen={(tracker) => show(tracker.slug, tracker.view, {})} /></main>
+        // Life trackers have their own screen; as tiles they would bury the list under stations.
+        <main><Overview trackers={trackers.filter((tracker) => tracker.view !== LIFE_VIEW)} onOpen={(tracker) => show(tracker.slug, tracker.view, {})} /></main>
       )}
 
       {open && view && (
