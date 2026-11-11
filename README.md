@@ -11,8 +11,12 @@ trackers (`country_risk`, ported from the conflict map) carry a sourced
 record with a peace score and open on a globe. Stock trackers (`stock`,
 ported from the investment engine) tick every 15 minutes in market hours,
 alert once when the price reaches the line, and open on a price chart. Every
-push runs unit, smoke and end-to-end checks. Next: life, Phase 4 in
-[docs/ROADMAP.md](docs/ROADMAP.md). How to run: [CLAUDE.md](CLAUDE.md).
+push runs unit, smoke and end-to-end checks. Phase 4, life, is built and not
+yet cut over (2026-11-11): practices and campaigns are recorded from the
+Telegram conversation and drawn on the Life screen (`/life` is the wall); the
+steps and where each stands are in
+[docs/LIFE_MIGRATION.md](docs/LIFE_MIGRATION.md). How to run:
+[CLAUDE.md](CLAUDE.md).
 
 ## Why one project
 
