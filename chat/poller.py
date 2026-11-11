@@ -6,6 +6,7 @@ later offset is acknowledged. The highest update id stored on a Message is
 the resume point, so a restart neither re-reads nor skips anything; an
 update from a foreign chat is skipped without being stored, which only means
 it is re-skipped after a restart (Telegram keeps it 24 h)."""
+import datetime
 import logging
 import time
 
@@ -23,6 +24,7 @@ from .models import Conversation, Message
 log = logging.getLogger(__name__)
 
 RETRY_DELAY_SEC = 10
+NO_TEXT_REPLY = "I can only read text for now: this one had none, so nothing was recorded. Send it as words."
 
 
 def stored_offset() -> int | None:
@@ -32,26 +34,36 @@ def stored_offset() -> int | None:
 
 def store_inbound(update: dict) -> Message | None:
     """The update's message as a Message row, or None when it is not for us
-    (another chat) or carries no text (a sticker, a photo without caption)."""
+    (another chat). A message with no text (a voice note, a photo without
+    caption) is stored empty, so the offset moves past it and it is answered
+    once. sent_at is Telegram's own time for the message, and for a forwarded
+    one the time of the original: forwarding again what got no reply files
+    it on the day it was first said."""
     message = update.get("message") or {}
     chat_id = str((message.get("chat") or {}).get("id", ""))
     if chat_id != str(settings.TELEGRAM_CHAT_ID):
         log.warning("ignoring update %s from chat %s", update.get("update_id"), chat_id)
         return None
-    text = message.get("text") or message.get("caption") or ""
-    if not text.strip():
-        return None
+    text = (message.get("text") or message.get("caption") or "").strip()
+    sent = (message.get("forward_origin") or {}).get("date") or message.get("date")
+    sent_at = datetime.datetime.fromtimestamp(sent, datetime.timezone.utc) if sent else timezone.now()
     conversation, _ = Conversation.objects.get_or_create(chat_id=chat_id, defaults={"channel": "telegram"})
     conversation.last_message_at = timezone.now()
     conversation.save(update_fields=["last_message_at"])
     return Message.objects.create(
-        conversation=conversation, direction=Message.Direction.IN, text=text,
+        conversation=conversation, direction=Message.Direction.IN, text=text, sent_at=sent_at,
         telegram_message_id=message.get("message_id"), telegram_update_id=update.get("update_id"))
 
 
 def handle_update(update: dict) -> None:
     inbound = store_inbound(update)
     if inbound is None:
+        return
+    if not inbound.text:
+        # Silence here would read as "recorded": the rule Guy works by is that a message with no reply was not.
+        sent_id = telegram.send(NO_TEXT_REPLY, chat_id=inbound.conversation.chat_id)
+        Message.objects.create(conversation=inbound.conversation, direction=Message.Direction.OUT,
+                               text=NO_TEXT_REPLY, telegram_message_id=sent_id)
         return
     reply_job = Job.objects.filter(name="reply", enabled=True).first()
     if reply_job is None:

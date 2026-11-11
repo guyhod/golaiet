@@ -13,7 +13,6 @@ def update(update_id, chat_id, text, message_id=1):
 def test_store_inbound_accepts_only_guys_chat(settings):
     settings.TELEGRAM_CHAT_ID = "6307"
     assert poller.store_inbound(update(10, 999, "hi")) is None
-    assert poller.store_inbound(update(11, 6307, "   ")) is None
     stored = poller.store_inbound(update(12, 6307, "track VRAM"))
     assert stored.direction == "in" and stored.conversation.chat_id == "6307" and stored.telegram_update_id == 12
     assert poller.stored_offset() == 13

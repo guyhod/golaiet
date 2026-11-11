@@ -29,6 +29,9 @@ def slug_of(title: str) -> str:
 
 def decide(prompt: str) -> tuple[str | None, dict, str]:
     """(tool, arguments, reply) for the prompt; tool None means answer only."""
+    if prompt.startswith("[Sent "):
+        # The reply flow's first line says when the message was sent; the script is the rest.
+        prompt = prompt.partition("\n")[2]
     words = prompt.strip().split()
     head = " ".join(words[:2]).lower()
     if words and words[0].lower() == "track" and "good below" in prompt.lower():

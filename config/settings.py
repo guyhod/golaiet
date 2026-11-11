@@ -96,6 +96,11 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 # --- Claude headless agent ---
 CLAUDE_BIN = os.getenv("CLAUDE_BIN", "claude")
 CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "sonnet")
+# The conversation can run on a stronger model than the collectors: it dates and files what Guy
+# reports about his own life, where a wrong day is a wrong record.
+CLAUDE_REPLY_MODEL = os.getenv("CLAUDE_REPLY_MODEL", CLAUDE_MODEL)
+# Guy's Obsidian vault, for the one tool that writes there (add_note). Empty: the tool refuses.
+VAULT_DIR = os.getenv("VAULT_DIR", "")
 AGENT_TIMEOUT_SEC = int(os.getenv("AGENT_TIMEOUT_SEC", "900"))
 # Where the CLI keeps its own state (session store, settings). Pointed at a
 # directory of our own so a session never loads this machine's user-level

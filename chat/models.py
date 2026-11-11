@@ -2,6 +2,7 @@
 The conversation row carries the Claude session id, so the agent resumes
 where the thread left off."""
 from django.db import models
+from django.utils import timezone
 
 
 class Conversation(models.Model):
@@ -23,6 +24,10 @@ class Message(models.Model):
     conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name="messages")
     direction = models.CharField(max_length=3, choices=Direction.choices)
     text = models.TextField()
+    # When Guy sent it, by Telegram's clock (for a forwarded message, when the original was sent).
+    # Not created_at: after an outage every queued message is stored in the minute the stack came
+    # back, and a report of "this morning" would be dated to that minute.
+    sent_at = models.DateTimeField(default=timezone.now)
     telegram_message_id = models.BigIntegerField(null=True, blank=True)
     # The poller resumes from the highest update id it has stored, so a restart
     # never re-reads an update and never skips one. The field is the offset.
