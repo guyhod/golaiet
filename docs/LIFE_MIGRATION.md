@@ -423,6 +423,15 @@ the import. This is not the step's line.
 rows; an answer to one of its questions changes a station with that answer
 as evidence (throwaway content).
 
+**Built 2026-11-11, exit check open.** The flow, the seeded job and the
+stopping rule are in and tested with the CLI stubbed (`make check`: 116
+pytest). Whether a message took up a question is read by the session that
+holds the conversation, as one last line the flow strips; the rows say
+whether and when the previous brief was delivered. The flow is 112 lines
+against the 60 estimated: the stopping rule and the week's facts were not
+counted. The exit check (a brief run by hand, one answer) needs Guy. This is
+not the step's line.
+
 ### Step 5 — cutover and the first week (1 evening + 7 days)
 
 **Gate:** Step 0's exit check still holds.

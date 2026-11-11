@@ -140,6 +140,11 @@ wall screen does today at 2 min.
 `digest` job (Sunday, or on request): reads assessments and alerts of the
 last 7 days across all trackers, writes one message. Replaces the Sunday
 weekly summary of `Life/Golaiet` once that tracker kind exists.
+Its seed is the Friday brief (`agent/flows/brief.py`, job `brief`, Friday
+07:30): a prompt built in code from the life board and the week's rows, run
+on the conversation's own session with read-only tools, sent as an ordinary
+message, and switched off by itself after three briefs in a row that nobody
+answered.
 
 ## 5. The agent's tools (MCP, stdio)
 

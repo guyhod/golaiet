@@ -88,7 +88,7 @@ scheduler/   Job, JobRun, jobs.py (rows→APScheduler), dispatcher.py, run_sched
              scripts/ (jobs without a session: heartbeat, prices)
 chat/        Conversation, Message, telegram.py (send + getUpdates), poller.py, alerts.py (delivery)
 agent/       runner.py (CLI subprocess), tools.py (the functions), prompts.py,
-             management/commands/mcp_tools.py (the tool server), flows/{reply,collect,assess,research}.py,
+             management/commands/mcp_tools.py (the tool server), flows/{reply,collect,assess,research,brief}.py,
              management/commands/replay.py (recorded messages through the reply flow, on a scratch database)
 api/         django-ninja read-only API (health, trackers, alerts, focus + its SSE stream)
 dashboard/   Vite + React app with its own Dockerfile (node build → nginx) and nginx.conf;

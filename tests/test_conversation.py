@@ -11,7 +11,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 
 from agent import flows, tools
-from agent.flows import reply
+from agent.flows import brief, reply
 from agent.runner import AgentResult
 from chat import poller, telegram
 from chat.models import Conversation, Message
@@ -181,3 +181,96 @@ def test_the_replay_compares_the_events_filed_with_the_events_expected(db, tmp_p
     with pytest.raises(CommandError, match="1 case"):
         call_command("replay", str(cases))
     assert "MISS c1" in capsys.readouterr().out
+
+
+# ---------------- the Friday brief ----------------
+
+@pytest.fixture
+def week(chat):
+    """A conversation, and a board with a week on it: a pass, an event, a check gone by, a proposal."""
+    Conversation.objects.create(chat_id="6307", session_id="22222222-2222-2222-2222-222222222222")
+    tools.create_tracker("stretch", "Stretching", "practice", {"color": "red", "started": "2031-03-01"}, "Ten minutes count.")
+    tools.record_observation("stretch", "2031-03-12", "", "Stretched.")
+    tools.create_tracker("garden", "Garden", "campaign", {"short": "Garden"}, "Bed by bed.")
+    said = tools.record_observation("garden", "2031-03-11", "", "The beds are dug; the fence by the 12th; maybe a pond.")
+    tools.record_assessment("garden", {"stations": [
+        {"id": "dig", "label": "Dig the beds", "track": "Beds", "state": "passed", "date": "2031-03-11"},
+        {"id": "fence", "label": "Mend the fence", "track": "Beds", "state": "current", "check": "2031-03-12"},
+        {"id": "pond", "label": "Dig a pond", "track": "Water", "state": "proposed"}]}, "He listed the work.", [said["id"]])
+    return Job.objects.create(name="brief", kind="digest", trigger="cron", schedule="30 7 * * fri", target="agent.flows.brief.run")
+
+
+FRIDAY = datetime.date(2031, 3, 14)
+
+
+def test_the_brief_is_built_from_the_weeks_rows(week):
+    text = brief.prompt(FRIDAY, None)
+    for line in ("- Garden: Dig the beds (Mar 11)", "- Stretching: reported on Wed 12", "- Garden — Mend the fence: check date Mar 12",
+                 "- Garden: Dig a pond", "at most three questions", "ANSWERED: first"):
+        assert line in text
+    quiet = brief.week_of(datetime.date(2031, 4, 20))
+    assert "Passed this week:\n- nothing" in quiet and "Practices that moved this week:\n- nothing" in quiet
+
+
+def brief_run(job, monkeypatch, answer):
+    calls = []
+
+    class Runner:
+        def __init__(self, model=None):
+            pass
+
+        def run(self, prompt, **kwargs):
+            calls.append({"prompt": prompt, "locked": flows.conversation_turn.locked(), **kwargs})
+            return AgentResult(text=answer, session_id="33333333-3333-3333-3333-333333333333")
+
+    monkeypatch.setattr(brief, "ClaudeRunner", Runner)
+    monkeypatch.setattr(brief.life, "today", lambda: FRIDAY)
+    run = JobRun.objects.create(job=job)
+    report = brief.run(job, run)
+    run.summary, run.status = report["summary"], "failed" if report.get("failed") else "done"
+    run.save()
+    return report, calls
+
+
+def test_the_brief_goes_out_from_the_conversations_own_session(week, chat, monkeypatch):
+    report, calls = brief_run(week, monkeypatch, "The beds are dug.\n1. Move the fence date?\nANSWERED: first")
+    call = calls[0]
+    assert call["resume"].startswith("2222") and call["locked"] and call["tools"] == []
+    assert all(tool.rpartition("__")[2] in ("list_trackers", "get_tracker", "search_observations") for tool in call["allowed_tools"])
+    assert chat == ["The beds are dug.\n1. Move the fence date?"] and report["summary"].startswith("answered=first delivered")
+    assert Conversation.objects.get().session_id.startswith("3333")
+    assert Message.objects.get(direction="out").job_run.job == week
+    _, calls = brief_run(week, monkeypatch, "Nothing new.\nANSWERED: yes")
+    assert "Your previous brief was delivered on" in calls[0]["prompt"]
+
+
+def test_three_unanswered_briefs_in_a_row_switch_it_off_once(week, chat, monkeypatch):
+    for answer in ("first", "no", "no"):
+        brief_run(week, monkeypatch, f"A brief.\nANSWERED: {answer}")
+    week.refresh_from_db()
+    assert week.enabled and len(chat) == 3
+    report, _ = brief_run(week, monkeypatch, "A fourth brief.\nANSWERED: no")
+    week.refresh_from_db()
+    assert not week.enabled and chat[-1] == brief.SWITCHED_OFF and "switched off" in report["summary"]
+
+
+def test_an_answer_or_a_missing_verdict_breaks_the_run_of_unanswered(week, chat, monkeypatch):
+    for answer in ("A brief.\nANSWERED: no", "A brief.\nANSWERED: no", "A brief with no verdict line.", "A brief.\nANSWERED: no"):
+        brief_run(week, monkeypatch, answer)
+    week.refresh_from_db()
+    assert week.enabled and brief.SWITCHED_OFF not in chat
+
+
+def test_the_brief_skips_an_empty_board_and_a_failed_session_sends_nothing(chat, monkeypatch, db):
+    job = Job.objects.create(name="brief", kind="digest", trigger="cron", schedule="30 7 * * fri", target="agent.flows.brief.run")
+    assert brief.run(job, JobRun.objects.create(job=job))["summary"].startswith("skipped")
+    Conversation.objects.create(chat_id="6307")
+    tools.create_tracker("stretch", "Stretching", "practice", {"color": "red", "started": "2031-03-01"}, "Ten minutes count.")
+    monkeypatch.setattr(brief.ClaudeRunner, "run", lambda self, prompt, **kw: AgentResult(text="usage limit reached", is_error=True))
+    assert brief.run(job, JobRun.objects.create(job=job))["failed"] and chat == []
+
+
+def test_the_brief_job_is_seeded_for_friday_morning(db):
+    call_command("seed_jobs", verbosity=0)
+    job = Job.objects.get(name="brief")
+    assert (job.kind, job.schedule, job.target) == ("digest", "30 7 * * fri", "agent.flows.brief.run")
