@@ -1,4 +1,4 @@
-"""The nine functions the agent may call. Registered as MCP
+"""The ten functions the agent may call. Registered as MCP
 tools by `manage.py mcp_tools`; name, docstring and type hints become the tool
 name, description and schema the model sees. Each call is one short unit of
 ORM work; provenance (which run, which message) comes from the environment the
@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, time
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from apscheduler.triggers.cron import CronTrigger
@@ -14,7 +15,7 @@ from django.conf import settings
 from django.core.validators import URLValidator
 from django.utils import timezone
 
-from core import kinds
+from core import kinds, life
 from core.models import Alert, Assessment, Focus, Observation, Tracker
 from scheduler.models import Job
 
@@ -119,9 +120,21 @@ def _next_fire(crontab: str) -> str:
     return fire.isoformat() if fire else "unknown"
 
 
-def list_trackers() -> list[dict]:
-    """List every tracker: slug, title, kind, status, cadence and when it last saw something."""
-    return [_tracker_dict(tracker) for tracker in Tracker.objects.all()]
+def list_trackers(kind: str | None = None) -> list[dict]:
+    """List the trackers, one short row each: slug, title, kind, status and the level of the latest
+    judgment. kind: only that kind (topic, country_risk, stock, practice, campaign). Use get_tracker
+    for one tracker's brief, state and observations."""
+    # One short row: with every tracker's whole latest state the listing outgrew what the CLI
+    # accepts as a tool result (25,000 tokens) once the country records were in.
+    if kind:
+        kinds.get(kind)
+    found = Tracker.objects.filter(kind=kind) if kind else Tracker.objects.all()
+    rows = []
+    for tracker in found:
+        judged = tracker.assessments.order_by("-at").first()
+        rows.append({"slug": tracker.slug, "title": tracker.title, "kind": tracker.kind, "status": tracker.status,
+                     "level": judged.level if judged else None})
+    return rows
 
 
 def get_tracker(slug: str, observations: int = 20) -> dict:
@@ -134,15 +147,20 @@ def get_tracker(slug: str, observations: int = 20) -> dict:
                 recent_observations=[_observation_dict(observation) for observation in recent])
 
 
-def create_tracker(slug: str, title: str, kind: str, subject: dict, brief: str, cadence: str) -> dict:
+def create_tracker(slug: str, title: str, kind: str, subject: dict, brief: str, cadence: str = "weekly") -> dict:
     """Start tracking something new. slug: short, lowercase, hyphens (e.g. vram-supply, isr).
-    kind: topic (a web-researched subject), country_risk (one country's war risk and peace score) or
-    stock (a listed company against a buy price). subject: the kind's fields (topic: {"query": ..., "regions": [...]};
+    kind: topic (a web-researched subject), country_risk (one country's war risk and peace score),
+    stock (a listed company against a buy price), practice (a habit of Guy's, counted from his reports) or
+    campaign (a lane of stations on his life map). subject: the kind's fields (topic: {"query": ..., "regions": [...]};
     country_risk: {"iso3": "ISR"}, with "desk": ["security", "political_stability"] for a daily news desk on those
-    lenses; stock: {"ticker": "CEG", "good_below": 170}).
-    brief: standing instructions for collecting (for a stock: the thesis), in full sentences.
-    cadence: hourly, daily or weekly (stock news: daily; prices tick on their own every 15 minutes).
-    Creates the tracker and its collect job; returns when the first run is."""
+    lenses; stock: {"ticker": "CEG", "good_below": 170}; practice: {"color": "green" for a streak that an event
+    breaks or "red" for a gap that an event closes, "started": "YYYY-MM-DD", "alert_after": days, red only};
+    campaign: {"short": a short name for the map}, all optional).
+    brief: standing instructions in full sentences (for a stock: the thesis; for a practice: what counts as an
+    event and how it is dated).
+    cadence: hourly, daily or weekly (stock news: daily; prices tick on their own every 15 minutes). A practice
+    and a campaign have no schedule and ignore it.
+    Creates the tracker and its jobs; returns when the first run is."""
     if Tracker.objects.filter(slug=slug).exists():
         raise ValueError(f"tracker {slug!r} already exists; use update_tracker")
     kind_module = kinds.get(kind)
@@ -158,12 +176,18 @@ def create_tracker(slug: str, title: str, kind: str, subject: dict, brief: str, 
 
 
 def update_tracker(slug: str, brief: str | None = None, cadence: str | None = None, status: str | None = None,
-                   subject: dict | None = None) -> dict:
+                   subject: dict | None = None, title: str | None = None) -> dict:
     """Change an existing tracker: a new brief (replaces the old one in full), a new cadence
-    (hourly, daily, weekly), its status (active, paused, archived), or a new subject (the kind's
-    fields in full, e.g. a stock's new good_below, a country's desk lenses). Omitted fields are untouched."""
+    (hourly, daily, weekly), its status (active; paused: off the board, still recorded; archived), a new
+    subject (the kind's fields in full, e.g. a stock's new good_below, a country's desk lenses), or a new
+    title (a practice is renamed when its definition changes). Omitted fields are untouched."""
     tracker = Tracker.objects.get(slug=slug)
     changed = []
+    if title is not None:
+        if not title.strip():
+            raise ValueError("title must not be empty")
+        tracker.title = title.strip()
+        changed.append("title")
     if subject is not None:
         tracker.subject = kinds.get(tracker.kind).validate_subject(subject)
         changed.append("subject")
@@ -189,8 +213,10 @@ def update_tracker(slug: str, brief: str | None = None, cadence: str | None = No
 
 def record_observation(slug: str, observed_at: str, source_url: str, summary: str, payload: dict | None = None) -> dict:
     """File one fact for a tracker. observed_at: ISO date or datetime the fact was published or happened.
-    source_url: where it comes from (required for web findings). summary: one or two sentences in your words
-    with the figure if there is one. payload: only the fields the tracker kind allows.
+    source_url: where it comes from (required for web findings; empty for what Guy reports himself).
+    summary: one or two sentences in your words with the figure if there is one; on a practice or a campaign,
+    Guy's own words. payload: only the fields the tracker kind allows (campaign: {"station": id} when the fact
+    is about one station; practice: {"retracts": id} to take back a wrong observation).
     A source_url already filed for this tracker is not filed again."""
     tracker = Tracker.objects.get(slug=slug)
     kind_module = kinds.get(tracker.kind)
@@ -224,7 +250,10 @@ def search_observations(query: str, slug: str | None = None, since: str | None =
 def record_assessment(slug: str, state: dict, reason: str, evidence_ids: list[int] | None = None) -> dict:
     """Record your judgment of a tracker; judgments are kept, never edited. state: the kind's fields
     (topic: {"level": quiet|watch|elevated|critical, "score": 0-100 optional}; country_risk: the record the
-    research request describes). reason: two to four sentences
+    research request describes; campaign: only what changes, e.g. {"stations": [{"id": "s2", "state": "passed",
+    "date": "YYYY-MM-DD"}]}, a new station as {"id", "label", "track"}, lane fields such as check, burning with
+    burning_why, focus with focus_why, next {"text", "hot"}, null to remove one, "dropped": [ids]; the lane is
+    stored whole and must cite at least one observation of what Guy said). reason: two to four sentences
     citing dates and figures. evidence_ids: ids of this tracker's observations you relied on.
     A change of level raises an alert to Guy by the kind's rule; you need not raise one yourself."""
     tracker = Tracker.objects.get(slug=slug)
@@ -238,6 +267,8 @@ def record_assessment(slug: str, state: dict, reason: str, evidence_ids: list[in
     missing = wanted - {observation.pk for observation in evidence}
     if missing:
         raise ValueError(f"evidence_ids are not observations of {slug}: {', '.join(map(str, sorted(missing)))}")
+    if hasattr(kind_module, "check_evidence"):
+        kind_module.check_evidence(evidence)
     assessment, alert = judge(tracker, state, reason, evidence, job_run_id=_run_id())
     return dict(_assessment_dict(assessment), alert=_alert_dict(alert) if alert else None)
 
@@ -291,5 +322,33 @@ def set_focus(slug: str | None = None, view_params: dict | None = None, note: st
     return _focus_dict(focus)
 
 
+def add_note(slug: str, text: str) -> dict:
+    """Append one dated line to the lane's own file in Guy's vault. Only when he asks for a note: what a
+    tracker records is not copied there. slug: a campaign whose subject names its file. text: the note, his words."""
+    tracker = Tracker.objects.get(slug=slug)
+    if not text.strip():
+        raise ValueError("text must not be empty")
+    if not settings.VAULT_DIR:
+        raise ValueError("the vault is not reachable from here (VAULT_DIR is not set)")
+    if not tracker.subject.get("file"):
+        raise ValueError(f"{slug} names no vault file (subject.file); ask Guy which file its notes go to")
+    vault = Path(settings.VAULT_DIR).resolve()
+    target = (vault / tracker.subject["file"]).resolve()
+    if not target.is_relative_to(vault) or not target.is_file():
+        raise ValueError(f"{tracker.subject['file']} is not an existing file inside the vault")
+    before = target.read_bytes()
+    line = f"- {life.today().isoformat()}: {' '.join(text.split())}\n"
+    written = (("" if not before or before.endswith(b"\n") else "\n") + line).encode("utf-8")
+    with target.open("ab") as handle:
+        handle.write(written)
+    # A file layer between a container and the Mac once handed back an empty file for a full one,
+    # so the write is believed only when the file grew by exactly what was written.
+    grown = target.stat().st_size - len(before)
+    if grown != len(written):
+        raise ValueError(f"the note may not have landed: {tracker.subject['file']} grew by {grown} bytes, "
+                         f"{len(written)} were written; tell Guy")
+    return {"file": tracker.subject["file"], "line": line.strip()}
+
+
 ALL = (list_trackers, get_tracker, create_tracker, update_tracker, record_observation, search_observations,
-       record_assessment, raise_alert, set_focus)
+       record_assessment, raise_alert, set_focus, add_note)

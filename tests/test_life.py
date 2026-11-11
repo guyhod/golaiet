@@ -188,8 +188,11 @@ def test_dropping_and_regrouping():
 
 def test_the_tool_stores_the_whole_lane_from_a_small_change(db):
     tools.create_tracker("garden", "Garden", "campaign", {"short": "Garden"}, "The garden, bed by bed.", "weekly")
-    tools.record_assessment("garden", LANE, "First state.")
+    plan = tools.record_observation("garden", "2031-03-01", "", "Three jobs: dig, mend the fence, paint the shed.")
+    tools.record_assessment("garden", LANE, "First state.", [plan["id"]])
     fact = tools.record_observation("garden", "2031-03-09", "", "The fence is mended.", {"station": "fence"})
+    with pytest.raises(ValueError, match="only on what Guy said"):
+        tools.record_assessment("garden", {"stations": [{"id": "fence", "state": "passed", "date": "2031-03-09"}]}, "He said so.")
     stored = tools.record_assessment("garden", {"stations": [{"id": "fence", "state": "passed", "date": "2031-03-09"}],
                                                 "next": {"text": "Buy paint", "hot": True}}, "He said so.", [fact["id"]])
     assert stored["alert"] is None and stored["state"]["changed"] == ["fence"]

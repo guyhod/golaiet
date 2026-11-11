@@ -96,7 +96,8 @@ alert. An outage must never look like a quiet day.
 conversation: channel · chat_id · session_id (for `--resume`) ·
 last_message_at.
 message: conversation FK · direction · text · telegram_message_id ·
-created_at · job_run FK.
+sent_at (Telegram's own time for the message; for a forward, the
+original's) · created_at · job_run FK.
 
 ### focus  (singleton)
 tracker FK (nullable) · view · view_params JSON · set_at · set_by_message
@@ -144,15 +145,16 @@ weekly summary of `Life/Golaiet` once that tracker kind exists.
 
 | Tool | Does |
 |---|---|
-| `list_trackers()` | slug, title, kind, status, latest assessment level |
+| `list_trackers(kind?)` | one short row per tracker: slug, title, kind, status, latest assessment level |
 | `get_tracker(slug, observations=20)` | full brief, latest assessment, recent observations |
 | `create_tracker(slug, title, kind, subject, brief, cadence)` | creates tracker + default jobs |
-| `update_tracker(slug, brief?, cadence?, status?)` | prefer this over a second tracker on the same subject |
+| `update_tracker(slug, brief?, cadence?, status?, subject?, title?)` | prefer this over a second tracker on the same subject |
 | `record_observation(slug, observed_at, source_url, summary, payload)` | validated by kind; duplicate URL is a no-op |
-| `record_assessment(slug, state, reason, evidence_ids)` | append-only; applies the kind's alert rule |
+| `record_assessment(slug, state, reason, evidence_ids)` | append-only; applies the kind's alert rule and, where the kind has one, its evidence rule (a campaign change cites an observation of what Guy said) |
 | `raise_alert(slug, level, text)` | for judgment-based alerts outside the level rule; returns the open alert at the same level |
 | `set_focus(slug?, view_params?, note?)` | no slug clears to the overview |
 | `search_observations(query, slug?, since?)` | full-text over summaries |
+| `add_note(slug, text)` | appends one dated line to the lane's own file in the vault, when Guy asks for a note; the only write outside the database |
 
 Reply sessions get all tools plus WebSearch/WebFetch. Collect sessions get
 only `record_observation` plus the web tools. Assess sessions get
@@ -186,7 +188,7 @@ goes through the Django ORM, in whichever process it happens.
 
 The MCP server is not a wrapper around Django. It **is** a Django process,
 the same code and settings as `web` and `scheduler`, whose only job is to
-expose the agent's functions (six in Phase 0, nine by Phase 1) to the CLI over a pipe.
+expose the agent's functions (six in Phase 0, nine by Phase 1, ten since Phase 4) to the CLI over a pipe.
 
 ```
 Guy ──Telegram──▶ scheduler.poller ─▶ Message(in) + Job(reply)   [ORM → Postgres]
@@ -219,7 +221,7 @@ Guy ──Telegram──▶ scheduler.poller ─▶ Message(in) + Job(reply)   [
 Who calls whom:
 - The scheduler calls the CLI. The CLI calls the MCP server. Never the
   other way round: the MCP server cannot start an agent, send a Telegram
-  message, or schedule anything. It can only run the nine functions.
+  message, or schedule anything. It can only run the ten functions.
 - The CLI calls Anthropic's API itself, under the plan login. Golaiet never
   holds an API key.
 - Nothing in an agent run talks to Telegram. The runner sends the reply
@@ -282,7 +284,7 @@ package:
 
 ```python
 from mcp.server.fastmcp import FastMCP
-from golaiet.agent import tools          # the nine plain functions
+from golaiet.agent import tools          # the ten plain functions
 
 server = FastMCP("golaiet")
 for function in tools.ALL:               # create_tracker, record_observation, set_focus, …

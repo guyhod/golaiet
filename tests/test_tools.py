@@ -80,7 +80,7 @@ def test_record_assessment_links_evidence_and_alerts_on_level_change(tracker, mo
         tools.record_assessment(tracker.slug, {"level": "panic"}, "x", [])
     with pytest.raises(ValueError, match="not observations of vram-supply: 999"):
         tools.record_assessment(tracker.slug, {"level": "watch"}, "x", [999])
-    assert tools.list_trackers()[0]["latest_assessment"]["state"] == {"level": "watch"}
+    assert tools.get_tracker(tracker.slug)["latest_assessment"]["state"] == {"level": "watch"}
 
 
 @pytest.mark.django_db

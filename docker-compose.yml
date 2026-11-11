@@ -58,6 +58,15 @@ services:
     command: python manage.py run_scheduler
     volumes:
       - claude_state:/root/.claude   # CLI session store; --resume survives container recreation
+      # The vault, for add_note alone; no other service sees it. Unset, an empty folder is mounted
+      # and the tool refuses for want of the lane's file.
+      - ${VAULT_HOST_DIR:-./logs/no-vault}:/vault
+    environment:   # the app's own, repeated: a service's environment replaces the anchor's, it does not add to it
+      DB_HOST: db
+      DB_PORT: "5432"
+      DJANGO_DEBUG: "false"
+      CLAUDE_CONFIG_DIR: /root/.claude
+      VAULT_DIR: /vault
 
   web:
     <<: *app

@@ -394,6 +394,11 @@ content: a consultation that brings up something for the board ends with a
 `proposed` station and a reply that says so, and nothing else on that lane
 has changed.
 
+**Built 2026-11-11, exit check open.** §3.4 and §3.5 are in and tested with
+the CLI stubbed (`make check`: 110 pytest; `make e2e`: 4 of 4). The exit
+check itself needs Guy: the go-ahead for the replay's sessions, one
+forwarded message, one live consultation. This is not the step's line.
+
 ### Step 3 — the Life screen and the wall (2–3 evenings)
 
 §3.3.

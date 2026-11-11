@@ -61,6 +61,16 @@ def alert_for(tracker, previous, new) -> None:
     return None
 
 
+def check_evidence(evidence: list) -> None:
+    """A lane changes only on Guy's words, so every change cites at least one
+    observation of the lane: the fact as he said it, filed in the same
+    conversation. A status nobody can trace to a message is the failure this
+    rule exists for."""
+    if not evidence:
+        raise ValueError("a lane changes only on what Guy said: file his words on this lane with "
+                         "record_observation first, then pass that observation's id in evidence_ids")
+
+
 def stations_of(state: dict) -> list[dict]:
     return [station for track in state.get("tracks", []) for station in track.get("stations", [])]
 
