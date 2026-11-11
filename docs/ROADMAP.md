@@ -10,7 +10,7 @@ decisions in [DECISIONS.md](DECISIONS.md) are made.
 | 1 | The screen | Dashboard with a generic view; focus pushed from a conversation |
 | 2 | War risk | First real tracker kind: `country_risk` with the globe; `topic` kind for antisemitism and VRAM |
 | 3 | Stocks | `stock` kind with price monitor, thresholds, alerts |
-| 4 | Life | `campaign` and `practice` kinds; the Inbox becomes a collector; the Desktop run retires |
+| 4 | Life | `campaign` and `practice` kinds; the conversation becomes the collector; the Desktop runs retire |
 | 5 | Digest and memory | Weekly digest, cost view, agent memory if still wanted |
 
 ## Phase 0: the loop
@@ -134,20 +134,23 @@ request, so the list is now sent in batches.
 
 ## Phase 4: life
 
-Build: `kinds/campaign` and `kinds/practice` with the `progress.md` schema
-as payload, the Inbox collect job (reads
-`/Users/guyhod/Kruv/Obsidian/Life/Golaiet/Inbox/`, checks byte counts, marks
-lines, never edits content), the `campaign_map` view and the drawer's
-History and Mentions. Import the current `progress.md` as the first state.
+The plan, step by step, is [LIFE_MIGRATION.md](LIFE_MIGRATION.md); its six
+calls were decided on 2026-11-11 (DECISIONS D13 to D18).
+
+Build: `kinds/practice` (events as observations) and `kinds/campaign` (the
+lane as the latest assessment), `/api/life` and the Life screen
+(`campaign_map`) with the drawer's History, the life rules of the reply
+flow, one vault tool, the Friday brief. Import the current `progress.md` as
+the first state.
 
 Exit test:
-1. A dictated Inbox line about a workout resets the red counter on the next hourly run, and the line is marked done.
+1. A Telegram message about a workout resets the red counter within a minute, and the reply names the date it recorded.
 2. The wall screen shows the same map the React shell shows today, served from Golaiet instead of `data.js`.
 3. A Friday question list arrives in Telegram instead of at the top of `Myself.md`, and an answer in Telegram updates the station.
-4. For one week both systems run; their outputs are compared daily. Then the Desktop scheduled runs are turned off.
+4. For one week Telegram is the only input and the Desktop runs are paused; every life message gets a reply naming what was recorded. Then the runs are deleted.
 
-Not in Phase 4: changing the Inbox format, moving `Myself.md`, Siri
-shortcut input.
+Not in Phase 4: reading the Inbox, moving `Myself.md` or `TODO.md`, voice
+notes, Siri shortcut input.
 
 ## Phase 5: digest and memory
 
@@ -158,3 +161,18 @@ mistakes that a resumed session does not catch.
 Exit test: "What should I know from this week?" returns one message that
 covers every tracker with a change, nothing that did not change, and the
 week's total cost.
+
+## After Phase 5: the direction (not yet a phase)
+
+Guy's direction, stated 2026-11-11: conversations in Telegram will be many
+and wide, on any subject, consultations included; the board grows from them
+on its own; and later Golaiet takes on independent tasks.
+
+The first part is already a rule: what the agent adds on its own is a
+proposal (the amended rule on who adds what, D10), and Phase 4 builds it
+into the reply flow. The rest is not designed. What it will need, in the
+order it will bite: a session that does not grow without end (the board is
+the memory, so a new session can open with the recent exchanges and
+nothing else), and decisions on what an independent task may do, with which
+tools and at what cost. Each gets its rows in DECISIONS.md and an exit test
+here before anything is built.

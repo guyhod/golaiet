@@ -6,6 +6,9 @@
 x-app: &app
   build: .
   env_file: .env
+  # Without this only db and dashboard came back: the Mac rebooted on
+  # 2026-11-02 23:47 and no job ran until the stack was started by hand on 11-05.
+  restart: always
   environment:
     DB_HOST: db          # in-network address; .env's localhost:5435 is for host runs
     DB_PORT: "5432"

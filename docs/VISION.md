@@ -89,10 +89,12 @@ by which message*. The dashboard subscribes to it and renders accordingly.
   (managers, feedback loops, promotion) is out of scope. Golaiet is one
   agent with many trackers. Specialised behaviour lives in tracker briefs,
   which are editable text, not in agent hierarchies.
-- **Not a replacement for Obsidian as Guy's writing surface.** The voice
-  Inbox stays where it is. Golaiet reads it; it does not own it.
+- **Not a replacement for Obsidian as Guy's writing surface.** The vault
+  stays his. Golaiet does not read it, and appends a note there only when
+  asked.
 - **Not multi-user.** One Telegram chat, one screen.
 - **Not a per-tracker schema.** Agents never alter the database schema.
   Observations carry a JSON payload validated against the tracker kind.
 - **Not a trading system and not a news reader.** It tracks what Guy asked
-  for, and only that.
+  for. What it adds on its own from a conversation is a proposal on the
+  board until he says so (DECISIONS D10, as amended 2026-11-11).

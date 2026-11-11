@@ -75,22 +75,23 @@ Full path: `/Users/guyhod/Kruv/Obsidian/Life/Golaiet/`.
 | Piece | Path | Becomes |
 |---|---|---|
 | The schema: practices (green streak / red gap), campaigns → tracks → stations, watches, next, append-only log with evidence | `progress.md` | `kinds/campaign`, `kinds/practice` payload schemas |
-| Derivation engine: counters from `since` + events, red/green rules, atomic writes, validation exit codes | `Claude/render_dashboard.py` `derive()` | `kinds/practice` assess script |
-| Metro map, drawer with History and Mentions, horizon bar, pulse row | `Claude/dashboard-react/src/components/*`, `lib/types.ts`, `lib/lookup.ts` | `dashboard/views/campaign_map` and the shell's drawer |
-| Agent guardrails: entry gate, `wc -c` before read, mark-don't-edit the Inbox, backup + JSON check, skip windows | `WIP/ריצות מקומיות.md`, `/Users/guyhod/Kruv/Obsidian/Life/CLAUDE.md` | `kinds/campaign` collect job rules |
+| Derivation engine: counters from `since` + events, red/green rules, atomic writes, validation exit codes | `Claude/render_dashboard.py` `derive()` | `kinds/practice`, computed at read |
+| Metro map, drawer with History and Mentions, horizon bar, pulse row | `Claude/dashboard-react/src/components/*`, `lib/types.ts`, `lib/lookup.ts` | `dashboard/views/life` (view `campaign_map`) and its drawer, History only |
+| Agent guardrails: entry gate, `wc -c` before read, mark-don't-edit the Inbox, backup + JSON check, skip windows | `WIP/ריצות מקומיות.md`, `/Users/guyhod/Kruv/Obsidian/Life/CLAUDE.md` | the evidence rule of `kinds/campaign` and the byte check in `add_note` |
 | Three-file memory pattern: `index`, `state`, `log` | `Claude/{index,state,log}.md` | open decision on agent memory |
 | Design rationale: "a map, not a tree", gated stages, lessons from the dead `progress.guyhod.com` | `WIP/דשבורד — תוכנית.md` | VISION §5 |
 
 **Leave:** the hourly Claude Desktop run as the executor. It is a pasted
 prompt that cannot be versioned, runs in a VM on UTC with a wrong vault
 path, and is blocked by weekly token limits. Golaiet's scheduler replaces
-it, and the Inbox stays as the input surface.
+it, and the Telegram conversation is the input surface (decided
+2026-11-11, DECISIONS D13).
 
 **Lessons (receipts in `Claude/state.md`, `Claude/log.md`)**
 - The same value in two places drifts apart. The router said an item was stuck for 3 weeks while the dashboard showed it passed. One source of truth per fact.
 - A prompt says what to do; it never repeats a value that lives in the data. Hardcoded practice lists and `stale_after_hours` went stale.
 - A counter is never stored; it is derived from `since` plus events. Silence is the default.
-- State changes are evidence-gated: a station passes only with a dated Inbox line. New items enter as `proposed`; only Guy promotes them.
+- State changes are evidence-gated: a station passes only with a dated message of Guy's. New items enter as `proposed`; only Guy promotes them.
 - Burning and focus are capped (3 each) and always carry a reason.
 - Every log entry points back to the verbatim day it came from. Keyword matches are labelled as not-truth.
 - Check the byte count before trusting a read: a FUSE cache returned an empty file and swallowed a dictation.
