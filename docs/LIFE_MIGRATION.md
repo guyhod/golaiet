@@ -364,6 +364,16 @@ Mac: pulse, burning, focus, horizon and lanes equal; trail equal in stations
 and dates; next equal as a set (the order becomes hot first, then lane
 order); quiet equal plus the `tasks` lane.
 
+**Done 2026-11-11.** `import_life --check` on the real file, imported into a
+scratch database on the Mac: every key equal or one of the named differences
+(trail by station and date, next as a set, quiet plus the tasks lane), today
+and on five other days; on the two later days the only extra is the overdue
+checks derived at read. `make check` green (101 pytest, 31 Vitest). Built
+before Step 0's exit check, on Guy's word that the Mac actions come last.
+Size: the import command is 267 lines against the 160 estimated; the 100
+over are the `--check` comparison and the dry-run report, which the estimate
+did not count.
+
 ### Step 2 — the conversation (1½–2 evenings)
 
 §3.4 and §3.5. Then the replay: `manage.py replay <cases>` feeds real

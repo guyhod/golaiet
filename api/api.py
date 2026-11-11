@@ -12,7 +12,7 @@ from django.utils import timezone
 from ninja import NinjaAPI
 
 from chat import telegram
-from core import kinds
+from core import kinds, life
 from core.models import Alert, Assessment, Focus, Observation, Tracker
 from scheduler.models import JobRun
 
@@ -97,6 +97,12 @@ def prices(request, slug: str, days: int = 30):
     since = timezone.now() - timedelta(days=max(1, min(days, 366)))
     ticks = get_object_or_404(Tracker, slug=slug).observations.filter(observed_at__gte=since, payload__has_key="price").order_by("observed_at")
     return [{"at": tick.observed_at, "price": tick.payload["price"]} for tick in ticks]
+
+
+@api.get("/life")
+def life_board(request):
+    """Everything the Life screen draws, built from the rows on every read."""
+    return life.board(life.today())
 
 
 @api.get("/alerts")

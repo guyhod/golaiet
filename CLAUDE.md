@@ -81,7 +81,9 @@ Three layers, and every push runs all three in GitHub Actions
 
 ```
 config/      settings, urls, wsgi
-core/        Tracker, Observation, Assessment, Alert, Focus, kinds/ (one module per tracker kind: topic, country_risk, stock)
+core/        Tracker, Observation, Assessment, Alert, Focus, kinds/ (one module per tracker kind: topic, country_risk, stock,
+             practice, campaign), life.py (the life board, built from the rows on every read),
+             management/commands/import_life.py (the vault's board in, once; --check compares the two boards)
 scheduler/   Job, JobRun, jobs.py (rows→APScheduler), dispatcher.py, run_scheduler, seed_jobs,
              scripts/ (jobs without a session: heartbeat, prices)
 chat/        Conversation, Message, telegram.py (send + getUpdates), poller.py, alerts.py (delivery)
