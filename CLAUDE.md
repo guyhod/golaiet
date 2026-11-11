@@ -94,4 +94,6 @@ dashboard/   Vite + React app with its own Dockerfile (node build → nginx) and
              e2e/ the Playwright scenarios (playwright.config.ts)
 tests/       pytest-django; smoke/ (against a running stack), e2e/ (the fakes behind docker-compose.e2e.yml)
 docs/        the planning documents
+ops/         what runs outside the stack, under launchd: watch.sh (hourly health check, notification), backup.sh (nightly pg_dump);
+             both log to logs/ (ignored)
 ```
