@@ -20,8 +20,8 @@ class Tracker(models.Model):
       ({"query": "GDDR7 and HBM pricing"}, {"iso3": "ISR"}, {"ticker": "CEG", "good_below": 170}).
     - `kind`: how it is tracked. A module under core/kinds that owns the subject
       and payload schemas, the ordered levels, the prompts that collect and judge,
-      the alert rule and the default jobs (`topic` today; `country_risk`, `stock`,
-      `campaign` to follow).
+      the alert rule and the default jobs (`topic`, `country_risk`, `stock`, and
+      the two kinds of Guy's own life, `practice` and `campaign`).
     - `brief`: the standing instructions in plain text, rendered into every prompt
       for this tracker. The thesis lives here, where Guy can read and edit it.
     - `view` / `view_params`: how the dashboard shows it when it has focus.

@@ -5,9 +5,13 @@ of its assessments' state; its ordered LEVELS (coolest first); the prompts that
 collect and judge for it; the rule that turns a new assessment into an alert
 (alert_for); and the jobs a tracker of that kind gets, from its subject (jobs).
 Adding a kind is a code change; adding a tracker of an existing kind is rows."""
+import datetime
+import re
 from importlib import import_module
 
-NAMES = ("topic", "country_risk", "stock")
+NAMES = ("topic", "country_risk", "stock", "practice", "campaign")
+# The two kinds of Guy's own life; they share a screen and have no schedule.
+LIFE = ("practice", "campaign")
 
 # Cadence words the agent may use, as crontab in settings.TIME_ZONE.
 CADENCES = {
@@ -25,6 +29,22 @@ def get(name: str):
     if name not in NAMES:
         raise ValueError(f"unknown tracker kind {name!r}; known: {', '.join(NAMES)}")
     return import_module(f"core.kinds.{name}")
+
+
+def iso_day(value, label: str) -> datetime.date:
+    """A calendar day written YYYY-MM-DD, and nothing looser: a date the model
+    wrote as '10/11' must be refused, not guessed."""
+    if not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        raise ValueError(f"{label} must be a YYYY-MM-DD date, got {value!r}")
+    try:
+        return datetime.date.fromisoformat(value)
+    except ValueError:
+        raise ValueError(f"{label} is not a real date: {value!r}")
+
+
+def short_day(day: datetime.date) -> str:
+    """'Nov 9': how the life board writes a day."""
+    return f"{day:%b} {day.day}"
 
 
 def validate(values: dict, schema: dict[str, tuple[type, bool]], label: str) -> dict:
