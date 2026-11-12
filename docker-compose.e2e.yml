@@ -20,6 +20,8 @@ services:
       ANTHROPIC_API_KEY: ""
     volumes:
       - ./tests:/app/tests:ro
+      # Never the real vault, whatever VAULT_HOST_DIR is in .env: the same mount point, an empty folder.
+      - ./logs/no-vault:/vault
     depends_on:
       telegram:
         condition: service_started
