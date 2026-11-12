@@ -14,11 +14,15 @@ LOG_DIR="${LOG_DIR:-$(cd "$(dirname "$0")/.." && pwd)/logs}"
 mkdir -p "$BACKUP_DIR" "$LOG_DIR"
 now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 target="$BACKUP_DIR/golaiet-$(date +%Y-%m-%d).dump"
+# A run that was killed mid-dump (the Mac shut down) leaves its half file behind; no later run owns it.
+rm -f "$BACKUP_DIR"/golaiet-*.dump.partial
 
 if docker exec "$CONTAINER" sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$target.partial"; then
     mv "$target.partial" "$target"
-    find "$BACKUP_DIR" -name 'golaiet-*.dump' -mtime "+$KEEP_DAYS" -delete
     echo "$now ok $(wc -c < "$target" | tr -d ' ') bytes $target" >> "$LOG_DIR/backup.log"
+    # The dump is safe by now; failing to drop old ones is its own line, not a silent end of the run.
+    find "$BACKUP_DIR" -name 'golaiet-*.dump' -mtime "+$KEEP_DAYS" -delete \
+        || echo "$now could not remove dumps older than $KEEP_DAYS days" >> "$LOG_DIR/backup.log"
 else
     rm -f "$target.partial"
     echo "$now failed" >> "$LOG_DIR/backup.log"

@@ -9,7 +9,7 @@ set -u
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:8003/api/health}"
 MAX_AGE_MINUTES="${MAX_AGE_MINUTES:-90}"
 LOG_DIR="${LOG_DIR:-$(cd "$(dirname "$0")/.." && pwd)/logs}"
-# test_ seam: the tests replace the notification with a command they can read.
+# test_ seam: tests/test_ops.py replaces the notification with a command it can read.
 test_notify="${test_notify:-}"
 
 notify() {

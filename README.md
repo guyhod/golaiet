@@ -18,6 +18,56 @@ steps and where each stands are in
 [docs/LIFE_MIGRATION.md](docs/LIFE_MIGRATION.md). How to run:
 [CLAUDE.md](CLAUDE.md).
 
+## Operating it
+
+**Bringing the running stack to the code in this folder.** `make stack`
+rebuilds the images and runs the migrations. A job that code seeds (the
+Friday `brief` is one) exists only after `seed_jobs` has run once:
+
+```bash
+make stack
+docker compose exec scheduler python manage.py seed_jobs
+make smoke
+```
+
+**The vault, for notes.** `add_note` writes only when `VAULT_HOST_DIR` in
+`.env` names the vault's folder, and Docker Desktop shares that folder
+(Settings › Resources › File sharing). Unset, the tool refuses.
+
+**Running one job by hand.** Any job, by its name in admin:
+
+```bash
+docker compose exec scheduler python manage.py shell -c \
+  "from scheduler.dispatcher import execute_job; from scheduler.models import Job; print(execute_job(Job.objects.get(name='brief')))"
+```
+
+This is a second process beside the scheduler, so it does not wait for a
+reply that is being written: run `brief` when no message is in flight, or
+the two would resume the conversation's session at once.
+
+**The watcher and the nightly dump** run outside the stack, under launchd.
+Nothing in this repo installs them:
+
+```bash
+chmod +x ops/watch.sh ops/backup.sh
+mkdir -p logs ~/Backups/golaiet
+cp ops/com.golaiet.watch.plist ops/com.golaiet.backup.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.golaiet.watch.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.golaiet.backup.plist
+launchctl kickstart gui/$(id -u)/com.golaiet.watch     # one run now; a line appears in logs/watch.log
+```
+
+The plists name this folder by its full path; edit them if the repo moves.
+A dump restores with
+`docker exec -i golaiet-db pg_restore -U <user> -d <database> < ~/Backups/golaiet/golaiet-<day>.dump`.
+To remove them:
+
+```bash
+launchctl bootout gui/$(id -u)/com.golaiet.watch
+launchctl bootout gui/$(id -u)/com.golaiet.backup
+rm ~/Library/LaunchAgents/com.golaiet.watch.plist ~/Library/LaunchAgents/com.golaiet.backup.plist
+```
+
 ## Why one project
 
 Three projects were built separately and turned out to be the same machine
