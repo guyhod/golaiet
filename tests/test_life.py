@@ -13,6 +13,7 @@ from core import life
 from core.kinds import campaign, practice
 from core.management.commands import import_life
 from core.models import Tracker
+from scheduler.models import Job, JobRun
 
 DAY = datetime.date(2031, 3, 10)
 
@@ -410,6 +411,7 @@ def test_the_api_serves_the_board_and_lists_the_new_kinds(imported, monkeypatch)
 
 RENDERER = '''
 import json, pathlib
+CAPS = {}
 def validate(data): pass
 def derive(data, today): return json.loads((pathlib.Path(__file__).parent / "board.json").read_text())
 def jsonable(view): return view
@@ -443,5 +445,7 @@ def test_overdue_checks_are_a_known_difference():
     old = {**empty, "today": "2031-03-16", "burning": [flagged], "burning_more": 0, "focus_more": 0}
     new = {**old, "burning": [flagged, late]}
     verdicts = {key: (verdict, acceptable) for key, verdict, acceptable in import_life.compare(old, new)}
-    assert verdicts["burning"] == ("equal plus 1 overdue check(s), derived at read", True)
+    assert verdicts["burning"] == ("equal, 1 overdue check(s) derived at read set aside", True)
+    missing = {**flagged, "title": "Kiln", "campaign": "kiln"}
+    assert not import_life.compare({**old, "burning": [flagged, missing]}, new)[2][2], "an overdue item does not stand in for a real one"
     assert not import_life.compare(old, {**old, "burning": [late, flagged, {**flagged, "why": "other"}]})[2][2]

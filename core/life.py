@@ -4,7 +4,8 @@ Built from the rows each time it is asked for and never stored: the pulse row
 from the practices' event days, the map from each campaign's latest
 assessment, and the panels (burning, focus, the week ahead, what passed,
 next actions) from both. `today` is the Jerusalem date; the caller passes it,
-so a test can stand on any day."""
+so a test can stand on any day, and the caps on each list, so the import's
+check can compare whole lists."""
 import copy
 import datetime
 from zoneinfo import ZoneInfo
@@ -87,12 +88,12 @@ def _checks(lane: dict) -> list[tuple[datetime.date, dict | None]]:
             if station.get("state") in OPEN and station.get("check")]
 
 
-def _horizon(lanes: list[dict], day: datetime.date) -> list[dict]:
+def _horizon(lanes: list[dict], day: datetime.date, caps: dict) -> list[dict]:
     """The next week, a day at a time: checks and target dates."""
     days: dict[datetime.date, list[dict]] = {}
 
     def add(due: datetime.date, item: dict) -> None:
-        if 0 <= (due - day).days <= CAPS["horizon_days"]:
+        if 0 <= (due - day).days <= caps["horizon_days"]:
             days.setdefault(due, []).append(item)
 
     for lane in lanes:
@@ -109,25 +110,25 @@ def _horizon(lanes: list[dict], day: datetime.date) -> list[dict]:
              "items": sorted(days[due], key=lambda item: item["label"])} for due in sorted(days)]
 
 
-def _trail(lanes: list[dict], day: datetime.date) -> list[dict]:
+def _trail(lanes: list[dict], day: datetime.date, caps: dict) -> list[dict]:
     """What passed in the last two weeks, newest first."""
     passed = []
     for lane in lanes:
         for station in campaign.stations_of(lane):
-            if station["state"] == "passed" and (day - iso_day(station["date"], "date")).days <= CAPS["trail_days"]:
+            if station["state"] == "passed" and (day - iso_day(station["date"], "date")).days <= caps["trail_days"]:
                 passed.append({"at": station["date"], "date": short_day(iso_day(station["date"], "date")),
                                "label": station["label"], "campaign": lane["short"], "station": station["id"]})
-    return sorted(passed, key=lambda item: item["at"], reverse=True)[:CAPS["trail"]]
+    return sorted(passed, key=lambda item: item["at"], reverse=True)[:caps["trail"]]
 
 
-def _drawn(lanes: list[dict]) -> tuple[list[dict], list[str]]:
+def _drawn(lanes: list[dict], caps: dict) -> tuple[list[dict], list[str]]:
     """The lanes the map has room for, and the names of the rest. A paused
     lane is never drawn; when the map is full, flagged lanes keep their place."""
     shown = [lane for lane in lanes if not lane.get("hidden")]
     quiet = [lane["short"] for lane in lanes if lane.get("hidden")]
-    if len(shown) > CAPS["lanes"]:
+    if len(shown) > caps["lanes"]:
         keep = [lane for lane in shown if lane.get("focus") or lane.get("burning")]
-        keep += [lane for lane in shown if lane not in keep][:max(0, CAPS["lanes"] - len(keep))]
+        keep += [lane for lane in shown if lane not in keep][:max(0, caps["lanes"] - len(keep))]
         quiet += [lane["short"] for lane in shown if lane not in keep]
         shown = [lane for lane in shown if lane in keep]
     for lane in shown:
@@ -169,16 +170,16 @@ def board(day: datetime.date, caps: dict = CAPS) -> dict:
             action = latest.state["next"]
             actions.append({"text": action["text"], "source": lanes[-1]["short"], "hot": bool(action.get("hot"))})
     burning, focus = _flagged(lanes, day)
-    shown, quiet = _drawn(lanes)
+    shown, quiet = _drawn(lanes, caps)
     return {
         "today": day.isoformat(),
-        "pulse": pulse[:CAPS["pulse"]],
-        "burning": burning[:CAPS["burning"]], "burning_more": max(0, len(burning) - CAPS["burning"]),
-        "focus": focus[:CAPS["focus"]], "focus_more": max(0, len(focus) - CAPS["focus"]),
-        "horizon": _horizon(lanes, day),
-        "trail": _trail(lanes, day),
+        "pulse": pulse[:caps["pulse"]],
+        "burning": burning[:caps["burning"]], "burning_more": max(0, len(burning) - caps["burning"]),
+        "focus": focus[:caps["focus"]], "focus_more": max(0, len(focus) - caps["focus"]),
+        "horizon": _horizon(lanes, day, caps),
+        "trail": _trail(lanes, day, caps),
         # Hot first, then the order of the lanes.
-        "next": sorted(actions, key=lambda action: not action["hot"])[:CAPS["next"]],
+        "next": sorted(actions, key=lambda action: not action["hot"])[:caps["next"]],
         "lanes": shown,
         "quiet": quiet,
     }

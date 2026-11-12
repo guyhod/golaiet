@@ -1,6 +1,6 @@
 """Bring the vault's life board into the database, once, by Guy's hand.
 
-    manage.py import_life <progress.md> --extras <json> [--dry-run] [--replace] [--events-until DATE]
+    manage.py import_life <progress.md> --extras <json> [--dry-run] [--replace [--force]] [--events-until DATE]
     manage.py import_life <progress.md> --check [--on DATE] [--renderer PATH]
 
 The file is the vault's data file: one JSON block of practices, campaigns,
@@ -12,9 +12,13 @@ its log filed under a name that is not a lane) go to one lane that is not
 drawn. Briefs and the lanes' vault files come from the extras file, which
 stays in the vault.
 
+--replace starts over. Once the conversation has recorded anything on a life
+tracker, that is no longer a rehearsal being repeated but Guy's record being
+deleted, so it is refused without --force and says what would go.
+
 --check writes nothing: it compares this repo's board with the vault's own
-renderer on the same file, key by key, and fails on a difference that is not
-one of the known ones."""
+renderer on the same file, key by key and with every list whole, and fails
+on a difference that is not one of the known ones."""
 import copy
 import datetime
 import importlib.util
@@ -36,6 +40,25 @@ TASKS = "tasks"
 NO_BRIEF = "(no brief yet: ask Guy what counts here and how it is dated before filing anything)"
 NO_TEXT = "(imported: an event day with no text in the log)"
 CAMPAIGN_IDENTITY = ("id", "title", "short", "tracks", "hidden")
+EXTRAS_FIELDS = ("practices", "lanes", "default_lane_brief")
+LANE_EXTRAS = ("brief", "file")
+# The lists --check compares whole: a cut list can hide a missing item behind the cut.
+WHOLE = 10 ** 6
+
+
+def check_extras(data: dict, extras: dict) -> None:
+    """An extras key nothing reads is refused: a brief under a mistyped id, or
+    a section the import has no place for, would otherwise be dropped in
+    silence and Guy would believe it was in."""
+    unknown = sorted(set(extras) - set(EXTRAS_FIELDS))
+    unknown += sorted(f"practices.{name}" for name in set(extras.get("practices", {})) - {item["id"] for item in data["practices"]})
+    lanes = {item["id"] for item in data["campaigns"]} | {TASKS}
+    for name, entry in extras.get("lanes", {}).items():
+        if name not in lanes:
+            unknown.append(f"lanes.{name}")
+        unknown += sorted(f"lanes.{name}.{field}" for field in set(entry) - set(LANE_EXTRAS))
+    if unknown:
+        raise CommandError(f"the extras file has keys the import does not read: {', '.join(unknown)}")
 
 
 def read_progress(path: Path) -> dict:
@@ -103,6 +126,10 @@ def rows_of(data: dict, extras: dict, events_until: datetime.date | None = None)
         # else the earlier of the day the practice was added and its first event (a practice can be added
         # after the last time the thing happened, and its gap then counts from that earlier day).
         started = min(added[item["id"]] + events[:1]) if events else item["since"]
+        if events_until and iso_day(started, "started") > events_until:
+            # It did not exist yet on that day; imported, its counter would run backwards.
+            left_out.append(f"practice {item['id']}: it starts after {events_until}")
+            continue
         subject = _filled({"color": item["color"], "started": started, "note": item.get("note"),
                            "alert_after": item.get("alert_after", 3) if item["color"] == "red" else None})
         subject["rank"] = rank
@@ -189,17 +216,17 @@ def _loose(value):
 
 
 def compare(old: dict, new: dict) -> list[tuple[str, str, bool]]:
-    """(key, verdict, acceptable) for every part of the board."""
+    """(key, verdict, acceptable) for every part of the board. Both boards
+    are given with their lists whole. The overdue checks this repo derives at
+    read are taken out first, and what is left must be equal, apart from the
+    three differences the plan names."""
+    overdue = [item for item in new["burning"] if item["why"] == life.OVERDUE]
+    new = {**new, "burning": [item for item in new["burning"] if item not in overdue]}
     verdicts = []
     for key in ("today", "pulse", "burning", "burning_more", "focus", "focus_more", "horizon", "trail", "next", "lanes", "quiet"):
         before, after = _loose(old.get(key)), _loose(new.get(key))
-        overdue = [item for item in new["burning"] if item["why"] == life.OVERDUE]
         if before == after:
-            verdict = "equal"
-        elif key == "burning" and _loose([item for item in new["burning"] if item not in overdue]) == before[:len(new["burning"]) - len(overdue)]:
-            verdict = f"equal plus {len(overdue)} overdue check(s), derived at read"
-        elif key == "burning_more" and overdue and new[key] >= old[key]:
-            verdict = f"vault {old[key]}, here {new[key]}: overdue checks beyond the ones shown"
+            verdict = "equal" + (f", {len(overdue)} overdue check(s) derived at read set aside" if key == "burning" and overdue else "")
         elif key == "trail" and ([(item["at"], str(item.get("station") or "").rpartition(".")[2]) for item in old[key]]
                                  == [(item["at"], item["station"]) for item in new[key]]):
             verdict = "same stations and dates (the label is the station's, not the log's)"
@@ -222,7 +249,11 @@ class Command(BaseCommand):
         parser.add_argument("--extras", type=Path, help="JSON with the briefs and the lanes' vault files")
         parser.add_argument("--dry-run", action="store_true", help="print what would be written and what is left out")
         parser.add_argument("--replace", action="store_true", help="drop the life trackers and import again")
-        parser.add_argument("--events-until", help="leave practice events after this day out (the replay's starting state)")
+        parser.add_argument("--force", action="store_true",
+                            help="with --replace: also when the conversation has recorded on the life trackers")
+        parser.add_argument("--events-until",
+                            help="the replay's starting state: practice events after this day, and practices that start "
+                                 "after it, are left out; lanes are imported as they stand, not as they stood then")
         parser.add_argument("--check", action="store_true", help="write nothing; compare the board with the vault's renderer")
         parser.add_argument("--on", help="the day --check compares on (default: today in Jerusalem)")
         parser.add_argument("--renderer", type=Path, help="default: Claude/render_dashboard.py beside the progress file")
@@ -232,6 +263,7 @@ class Command(BaseCommand):
         if options["check"]:
             return self.check_board(data, options)
         extras = json.loads(options["extras"].read_text(encoding="utf-8")) if options["extras"] else {}
+        check_extras(data, extras)
         until = iso_day(options["events_until"], "--events-until") if options["events_until"] else None
         trackers, left_out = rows_of(data, extras, until)
         for row in trackers:
@@ -244,11 +276,20 @@ class Command(BaseCommand):
             return
         with transaction.atomic():
             if options["replace"]:
+                said = Observation.objects.filter(tracker__kind__in=LIFE, job_run__isnull=False).count()
+                changed = Assessment.objects.filter(tracker__kind__in=LIFE, job_run__isnull=False).count()
+                if (said or changed) and not options["force"]:
+                    raise CommandError(f"--replace would delete what the conversation recorded: {said} observation(s) and "
+                                       f"{changed} lane change(s) on the life trackers. Nothing was changed; "
+                                       "--force deletes them.")
                 Tracker.objects.filter(kind__in=LIFE).delete()
             taken = Tracker.objects.filter(slug__in=[row["slug"] for row in trackers]).values_list("slug", flat=True)
             if taken:
                 raise CommandError(f"trackers already exist: {', '.join(taken)} (life trackers are replaced with --replace)")
-            write(trackers)
+            try:
+                write(trackers)
+            except ValueError as refused:
+                raise CommandError(f"nothing was imported: {refused}")
         self.stdout.write(f"imported {len(trackers)} trackers")
 
     def check_board(self, data: dict, options: dict) -> None:
@@ -258,8 +299,10 @@ class Command(BaseCommand):
         spec.loader.exec_module(renderer)
         day = iso_day(options["on"], "--on") if options["on"] else life.today()
         renderer.validate(data)
+        renderer.CAPS.update({name: WHOLE for name in ("pulse", "burning", "focus", "next_max", "trail_max", "lanes")})
         old = renderer.jsonable(renderer.derive(copy.deepcopy(data), day))
-        verdicts = compare(old, life.board(day))
+        whole = {**life.CAPS, **{name: WHOLE for name in ("pulse", "burning", "focus", "next", "trail", "lanes")}}
+        verdicts = compare(old, life.board(day, whole))
         self.stdout.write(f"board on {day}:")
         for key, verdict, _ in verdicts:
             self.stdout.write(f"  {key:13s} {verdict}")
