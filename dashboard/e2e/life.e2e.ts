@@ -49,6 +49,13 @@ test("the wall shows life alone, and a conversation opens a lane on it", async (
   await expect(drawer.getByRole("heading", { name: "Garden" })).toBeVisible();
   await expect(drawer).toContainText("Lane Garden: Dig the beds");
   await page.screenshot({ path: testInfo.outputPath("wall.png") });
+  // The stream repeats the current focus on every connect; a reload does not open the drawer again.
+  await page.reload();
+  await expect(page.locator(".map-card")).toContainText("Garden");
+  await page.waitForTimeout(2_000);
+  await expect(drawer).toHaveCount(0);
+  expect(await say("Show me Garden")).toBe("Garden is on screen.");
+  await expect(drawer.getByRole("heading", { name: "Garden" })).toBeVisible();
   // A question about something that is not life does not take the wall away.
   expect(await say("Track Roses weekly")).toBe("Tracking Roses weekly.");
   expect(await say("Show me Roses")).toBe("Roses is on screen.");

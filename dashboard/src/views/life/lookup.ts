@@ -1,15 +1,14 @@
 // Finding things on the board and in a tracker's rows: pure, so Vitest covers it.
-import type { Assessment, Observation } from "../../api";
+import type { Assessment, Observation, TrackerDetail } from "../../api";
 import type { Board, Campaign, Selection, Station, Track } from "./types";
 
-/** A lane by its id, or by the name a panel shows for it (its short name or title). */
-export function findLane(board: Board, key: string): Campaign | undefined {
-  const wanted = key.trim().toLowerCase();
-  return (
-    board.lanes.find((lane) => lane.id.toLowerCase() === wanted) ??
-    board.lanes.find((lane) => lane.short.toLowerCase() === wanted) ??
-    board.lanes.find((lane) => lane.title.toLowerCase() === wanted)
-  );
+/** A lane the map does not draw (paused, or no room), from its tracker: the board lists such a lane by
+ *  name only, and its stations still show in Burning, the horizon, Next and the trail. */
+export function laneOf(detail: TrackerDetail): Campaign | undefined {
+  const state = detail.latest_assessment?.state;
+  if (!state || !Array.isArray(state.tracks)) return undefined;
+  const short = typeof detail.subject.short === "string" ? detail.subject.short : detail.title;
+  return { ...(state as Partial<Campaign>), id: detail.slug, title: detail.title, short, tracks: state.tracks, _wide: false, _meta: "" };
 }
 
 export function findStation(lane: Campaign, id: string): { track: Track; station: Station } | undefined {

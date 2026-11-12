@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import type { Assessment, Observation } from "../../api";
-import { campaignsOn, dayOf, findLane, findStation, historyOf, selectionFor } from "./lookup";
+import { campaignsOn, dayOf, findStation, historyOf, laneOf, selectionFor } from "./lookup";
 import type { Board, Campaign } from "./types";
 
 const garden: Campaign = {
@@ -20,13 +20,22 @@ function change(id: number, changed: string[], evidence: number[]): Assessment {
   return { id, at: "2031-03-09T10:00:00Z", state: { changed }, reason: "He said so.", evidence_ids: evidence };
 }
 
-it("a lane is found by id, short name or title, and a station inside it", () => {
-  expect(findLane(board, "garden")).toBe(garden);
-  expect(findLane(board, " Garden ")).toBe(garden);
-  expect(findLane(board, "garden and orchard")).toBe(garden);
-  expect(findLane(board, "Boat")).toBeUndefined();
+it("a station is found inside its lane", () => {
   expect(findStation(garden, "fence")?.track.caption).toBe("Beds");
   expect(findStation(garden, "pond")).toBeUndefined();
+});
+
+it("a lane the map does not draw is read from its tracker", () => {
+  const tracker = {
+    slug: "boat", title: "Boat repair", kind: "campaign", status: "paused" as const, view: "campaign_map", subject: { short: "Boat" },
+    observations: 0, latest_observation_at: null, level: "steady", level_rank: 0, brief: "", recent_assessments: [], recent_observations: [],
+    latest_assessment: change(1, [], []),
+  };
+  expect(laneOf(tracker)).toBeUndefined();
+  const state = { level: "steady", changed: [], check: "2031-03-15", tracks: [{ stations: [{ id: "hull", label: "Sand the hull", state: "ahead" }] }] };
+  const lane = laneOf({ ...tracker, latest_assessment: { ...change(1, [], []), state } });
+  expect(lane && [lane.id, lane.title, lane.short, lane.check]).toEqual(["boat", "Boat repair", "Boat", "2031-03-15"]);
+  expect(lane && findStation(lane, "hull")?.station.label).toBe("Sand the hull");
 });
 
 it("a day of the horizon names the lanes due on it", () => {

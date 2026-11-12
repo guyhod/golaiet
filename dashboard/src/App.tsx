@@ -3,6 +3,7 @@ import { watchFocus, formatWhen } from "./api";
 import type { Alert, Focus, Health, Tracker } from "./api";
 import { usePolled } from "./polled";
 import { Module } from "./Module";
+import { firstTime } from "./pushed";
 import { Globe } from "./views/Globe";
 import { Life, type Pushed } from "./views/life/Life";
 import { News } from "./views/News";
@@ -41,11 +42,7 @@ export function App() {
   const [pushedLife, setPushedLife] = useState<Pushed | null>(null);
 
   const show = (slug: string | null, view: string, params: Record<string, unknown>) => {
-    if (slug && view === LIFE_VIEW) {
-      setScreen("life");
-      setPushedLife({ slug, params, at: new Date().toISOString() });
-      setOpen(null);
-    } else if (WALL) {
+    if (WALL) {
       return;
     } else if (slug && view === "globe") {
       setScreen("globe");
@@ -61,7 +58,15 @@ export function App() {
     () =>
       watchFocus((pushed) => {
         setFocus(pushed);
-        show(pushed.tracker, pushed.view, pushed.view_params);
+        if (pushed.tracker && pushed.view === LIFE_VIEW) {
+          // The stream repeats the current focus on every connect; a drawer is opened for it once.
+          if (!firstTime(pushed.set_at)) return;
+          setScreen("life");
+          setPushedLife({ slug: pushed.tracker, params: pushed.view_params, at: pushed.set_at });
+          setOpen(null);
+        } else {
+          show(pushed.tracker, pushed.view, pushed.view_params);
+        }
       }),
     [],
   );
@@ -98,7 +103,7 @@ export function App() {
         </button>
         <nav className="tabs" role="tablist" aria-label="screen">
           {SCREENS.map(([choice, word]) => (
-            <button key={choice} role="tab" aria-selected={screen === choice} className={screen === choice ? "on" : ""} onClick={() => setScreen(choice)}>
+            <button key={choice} role="tab" aria-selected={screen === choice} className={screen === choice ? "on" : ""} onClick={() => { setScreen(choice); setPushedLife(null); }}>
               {word}
             </button>
           ))}

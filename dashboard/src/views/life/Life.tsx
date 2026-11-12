@@ -3,7 +3,7 @@ import { usePolled } from "../../polled";
 import { CampaignMap } from "./CampaignMap";
 import { Drawer } from "./Drawer";
 import { BurningPanel, FocusPanel, HorizonBar, Legend, NextPanel, PulseRow, PulseTile } from "./Panels";
-import { campaignsOn, findLane, selectionFor } from "./lookup";
+import { campaignsOn, selectionFor } from "./lookup";
 import type { Board, Selection } from "./types";
 
 // The Life screen: Guy's practices along the top, what is burning and in focus, the week ahead, the map
@@ -18,6 +18,7 @@ const MAP_ROOM = 650;
 // The wall has no keyboard and nobody near it: a drawer a conversation opened closes by itself.
 const PUSHED_DRAWER_MS = 90_000;
 
+/** A focus a conversation pushed; `at` is when it was set, which names it. */
 export type Pushed = { slug: string; params: Record<string, unknown>; at: string };
 
 /** The size of the box the screen has, kept current, to choose the layout and the canvas scale. */
@@ -67,11 +68,7 @@ export function Life({ wall, pushed }: { wall: boolean; pushed: Pushed | null })
 
   const select = (campaign: string, station?: string) =>
     setSelection(station ? { kind: "station", campaign, station } : { kind: "lane", campaign });
-  const openSource = (source: string, station?: string) => {
-    const lane = findLane(board, source);
-    if (lane) select(lane.id, station);
-  };
-  const next = due ? board.next.filter((action) => due.has(findLane(board, action.source)?.id ?? "")) : board.next;
+  const next = due ? board.next.filter((action) => due.has(action.lane)) : board.next;
   const filterLabel = filterDate ? board.horizon.find((day) => day.date === filterDate)?.label ?? filterDate : null;
   const onMap = selection && selection.kind !== "practice"
     ? { campaign: selection.campaign, station: selection.kind === "station" ? selection.station : undefined }
@@ -93,7 +90,7 @@ export function Life({ wall, pushed }: { wall: boolean; pushed: Pushed | null })
     burning: (area?: string) => <BurningPanel items={board.burning} more={board.burning_more} style={{ gridArea: area }} onSelect={setSelection} />,
     focus: (area?: string) => <FocusPanel items={board.focus} style={{ gridArea: area }} onSelect={setSelection} />,
     horizon: (area?: string) => <HorizonBar horizon={board.horizon} filterDate={filterDate} style={{ gridArea: area }} onFilter={setFilterDate} onSelect={setSelection} />,
-    next: (area?: string) => <NextPanel next={next} trail={board.trail} filterLabel={filterLabel} style={{ gridArea: area }} onClearFilter={() => setFilterDate(null)} onSource={openSource} />,
+    next: (area?: string) => <NextPanel next={next} trail={board.trail} filterLabel={filterLabel} style={{ gridArea: area }} onClearFilter={() => setFilterDate(null)} onSource={select} />,
   };
 
   if (size.width >= WIDE_FROM) {

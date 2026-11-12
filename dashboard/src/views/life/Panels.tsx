@@ -119,7 +119,7 @@ export function HorizonBar({ horizon, filterDate, style, onFilter, onSelect }: {
 
 export function NextPanel({ next, trail, filterLabel, style, onClearFilter, onSource }: {
   next: NextAction[]; trail: TrailItem[]; filterLabel: string | null; onClearFilter: () => void;
-  onSource: (source: string, station?: string) => void;
+  onSource: (lane: string, station?: string) => void;
 } & Placed) {
   return (
     <section className="card panel next" style={style}>
@@ -134,7 +134,7 @@ export function NextPanel({ next, trail, filterLabel, style, onClearFilter, onSo
             <span className={`ring${action.hot ? " hot" : ""}`}>{action.hot ? "!" : "○"}</span>
             <span className="row-text">
               <span className="next-text">{action.text}</span>
-              <button className="link source" onClick={() => onSource(action.source)}>{action.source}</button>
+              <button className="link source" onClick={() => onSource(action.lane)}>{action.source}</button>
             </span>
           </li>
         ))}
@@ -147,7 +147,7 @@ export function NextPanel({ next, trail, filterLabel, style, onClearFilter, onSo
             <span className="trail-date">{item.date}</span>
             <span className="row-text">
               <span className="trail-label">{item.label}</span>
-              <button className="link source" onClick={() => onSource(item.campaign, item.station)}>{item.campaign}</button>
+              <button className="link source" onClick={() => onSource(item.lane, item.station)}>{item.campaign}</button>
             </span>
           </li>
         ))}

@@ -117,7 +117,8 @@ def _trail(lanes: list[dict], day: datetime.date, caps: dict) -> list[dict]:
         for station in campaign.stations_of(lane):
             if station["state"] == "passed" and (day - iso_day(station["date"], "date")).days <= caps["trail_days"]:
                 passed.append({"at": station["date"], "date": short_day(iso_day(station["date"], "date")),
-                               "label": station["label"], "campaign": lane["short"], "station": station["id"]})
+                               "label": station["label"], "campaign": lane["short"], "lane": lane["id"],
+                               "station": station["id"]})
     return sorted(passed, key=lambda item: item["at"], reverse=True)[:caps["trail"]]
 
 
@@ -168,7 +169,8 @@ def board(day: datetime.date, caps: dict = CAPS) -> dict:
         lanes.append(_lane(tracker, latest.state))
         if latest.state.get("next"):
             action = latest.state["next"]
-            actions.append({"text": action["text"], "source": lanes[-1]["short"], "hot": bool(action.get("hot"))})
+            actions.append({"text": action["text"], "source": lanes[-1]["short"], "lane": tracker.slug,
+                            "hot": bool(action.get("hot"))})
     burning, focus = _flagged(lanes, day)
     shown, quiet = _drawn(lanes, caps)
     return {

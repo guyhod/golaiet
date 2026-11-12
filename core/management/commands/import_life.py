@@ -231,7 +231,7 @@ def compare(old: dict, new: dict) -> list[tuple[str, str, bool]]:
                                  == [(item["at"], item["station"]) for item in new[key]]):
             verdict = "same stations and dates (the label is the station's, not the log's)"
         elif key == "next" and (sorted(json.dumps(_loose(item), sort_keys=True) for item in old[key])
-                                == sorted(json.dumps(_loose(item), sort_keys=True) for item in new[key])):
+                                == sorted(json.dumps(_loose({**item, "lane": None}), sort_keys=True) for item in new[key])):
             verdict = "same actions, hot first then lane order"
         elif key == "quiet" and [name for name in new[key] if name != "Tasks"] == old[key]:
             verdict = "equal plus the tasks lane"

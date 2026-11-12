@@ -14,6 +14,7 @@ export interface Station {
   burning_why?: string;
   burning_title?: string;
   focus?: boolean;
+  focus_why?: string;
   focus_title?: string;
   options?: string[];
   requires?: string[];
@@ -82,7 +83,8 @@ export interface Focus {
 
 export interface NextAction {
   text: string;
-  source: string;
+  source: string; // the lane's short name
+  lane: string; // the lane's id
   hot: boolean;
 }
 
@@ -105,6 +107,7 @@ export interface TrailItem {
   date: string;
   label: string;
   campaign: string; // the lane's short name
+  lane: string; // the lane's id
   station: string;
 }
 

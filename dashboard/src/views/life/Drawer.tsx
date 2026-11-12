@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { TrackerDetail } from "../../api";
 import { usePolled } from "../../polled";
 import { Dots } from "./Panels";
-import { dayOf, findLane, findStation, historyOf } from "./lookup";
+import { dayOf, findStation, historyOf, laneOf } from "./lookup";
 import { fmt } from "./palette";
 import type { Board, Campaign, Pulse, Selection, Station, StationState } from "./types";
 
@@ -13,8 +13,9 @@ const STATE_WORDS: Record<StationState, string> = {
   passed: "passed", current: "heading there now", ahead: "ahead", proposed: "proposed — not confirmed",
   decision: "decision", ref: "interchange",
 };
-// Enough for a lane's whole history; the API caps it at 500.
+// Enough for a lane's whole history, and for every change that cited it; the API caps both at 500.
 const HISTORY_ROWS = 500;
+const detailUrl = (slug: string) => `/api/trackers/${slug}?limit=${HISTORY_ROWS}&assessments=${HISTORY_ROWS}`;
 
 function Field({ name, value, alarm }: { name: string; value?: string | null; alarm?: boolean }) {
   if (!value) return null;
@@ -36,7 +37,7 @@ function Section({ title, count, children }: { title: string; count?: number; ch
 }
 
 function History({ slug, station }: { slug: string; station?: string }) {
-  const { data: detail, error } = usePolled<TrackerDetail>(`/api/trackers/${slug}?limit=${HISTORY_ROWS}`);
+  const { data: detail, error } = usePolled<TrackerDetail>(detailUrl(slug));
   if (error && !detail) return <Section title="History"><p className="none">Cannot load the history: {error}</p></Section>;
   if (!detail) return <Section title="History"><p className="none">Loading…</p></Section>;
   const facts = historyOf(detail.recent_observations, detail.recent_assessments, station);
@@ -73,6 +74,7 @@ function StationBody({ lane, station, caption, onSelect }: { lane: Campaign; sta
         <Field name="check" value={station.check && fmt(station.check)} />
         <Field name="note" value={station.note} />
         <Field name="why" value={station.burning_why} alarm />
+        <Field name="focus" value={station.focus_why} />
         <Field name="options" value={station.options?.join(" · ")} />
         <Field name="requires" value={station.requires?.join(", ")} />
         <Field name="ref" value={station.ref} />
@@ -86,7 +88,7 @@ function LaneBody({ lane, onSelect }: { lane: Campaign; onSelect: (selection: Se
   return (
     <>
       <h2>{lane.title}</h2>
-      <div className="crumb">{lane._meta}</div>
+      <div className="crumb">{lane._meta || "not drawn on the map"}</div>
       <div className="pills">
         {lane.focus && <span className="pill pill-warn">★ focus</span>}
         {lane.burning && <span className="pill pill-crit">! burning</span>}
@@ -146,6 +148,23 @@ function PracticeBody({ tile }: { tile: Pulse }) {
   );
 }
 
+/** A lane the map does not draw, read from its tracker, so that a station opened from Burning, the
+ *  horizon, Next or the trail shows what it is and not only its history. */
+function Undrawn({ selection, onSelect }: { selection: Exclude<Selection, { kind: "practice" }>; onSelect: (selection: Selection) => void }) {
+  const { data: detail, error } = usePolled<TrackerDetail>(detailUrl(selection.campaign));
+  if (!detail) return <p className="none">{error ? `Cannot load this lane: ${error}` : "Loading…"}</p>;
+  const lane = laneOf(detail);
+  const found = lane && selection.kind === "station" ? findStation(lane, selection.station) : undefined;
+  if (lane && found) return <StationBody lane={lane} station={found.station} caption={found.track.caption} onSelect={onSelect} />;
+  if (lane) return <LaneBody lane={lane} onSelect={onSelect} />;
+  return (
+    <>
+      <p className="none">This lane has no stations yet.</p>
+      <History slug={selection.campaign} />
+    </>
+  );
+}
+
 export function Drawer({ selection, board, sheet, onClose, onSelect }: {
   selection: Selection; board: Board; sheet: boolean; onClose: () => void; onSelect: (selection: Selection) => void;
 }) {
@@ -154,20 +173,14 @@ export function Drawer({ selection, board, sheet, onClose, onSelect }: {
     const tile = board.pulse.find((candidate) => candidate.id === selection.id);
     body = tile ? <PracticeBody tile={tile} /> : <p className="none">This practice is off the board.</p>;
   } else {
-    const lane = findLane(board, selection.campaign);
+    const lane = board.lanes.find((candidate) => candidate.id === selection.campaign);
     const found = lane && selection.kind === "station" ? findStation(lane, selection.station) : undefined;
     if (lane && found) {
       body = <StationBody lane={lane} station={found.station} caption={found.track.caption} onSelect={onSelect} />;
-    } else if (lane && selection.kind === "lane") {
+    } else if (lane) {
       body = <LaneBody lane={lane} onSelect={onSelect} />;
     } else {
-      // A lane the map has no room for, or one that is paused: its facts are still on record.
-      body = (
-        <>
-          <p className="none">Not drawn on the map (a quiet lane).</p>
-          <History slug={selection.campaign} station={selection.kind === "station" ? selection.station : undefined} />
-        </>
-      );
+      body = <Undrawn selection={selection} onSelect={onSelect} />;
     }
   }
   return (

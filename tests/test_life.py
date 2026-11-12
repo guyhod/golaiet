@@ -329,8 +329,9 @@ def test_the_board_is_built_from_the_rows(imported):
     assert "next" not in garden and "level" not in garden
     assert board["focus"] == [{"title": "Garden", "why": "spring", "rank": 1, "campaign": "garden"}]
     assert board["burning"] == [] and board["burning_more"] == 0
-    assert board["next"] == [{"text": "Order timber", "source": "Garden", "hot": True}]
-    assert [(item["station"], item["campaign"]) for item in board["trail"]] == [("glaze", "Tasks"), ("dig", "Garden")]
+    assert board["next"] == [{"text": "Order timber", "source": "Garden", "lane": "garden", "hot": True}]
+    assert [(item["station"], item["campaign"], item["lane"]) for item in board["trail"]] == [
+        ("glaze", "Tasks", "tasks"), ("dig", "Garden", "garden")]
     assert [(day["date"], [item["label"] for item in day["items"]]) for day in board["horizon"]] == [
         ("2031-03-11", ["Tasks: Harbour permit"]), ("2031-03-12", ["Garden"]), ("2031-03-15", ["Boat: Sand the hull"])]
 
@@ -422,6 +423,7 @@ def test_the_check_passes_on_the_known_differences_and_fails_on_any_other(import
     progress, _ = imported
     old = life.board(DAY)
     old["quiet"] = ["Boat"]
+    old["next"] = [{"text": action["text"], "source": action["source"], "hot": action["hot"]} for action in old["next"]]
     old["trail"] = [{**item, "label": "the log's own wording", "station": "garden." + item["station"]} for item in old["trail"]]
     old["lanes"][0].update(burning=False, burning_why="", note=None)
     renderer = tmp_path / "renderer.py"
