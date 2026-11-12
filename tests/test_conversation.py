@@ -214,6 +214,7 @@ def test_the_replay_compares_the_events_filed_with_the_events_expected(db, tmp_p
     monkeypatch.setattr(telegram, "_post", lambda *a, **k: pytest.fail("the replay sends nothing"))
     call_command("replay", str(cases))
     assert capsys.readouterr().out.count("ok  ") == 2
+    assert Conversation.objects.count() == 2, "each case starts a session of its own"
     with pytest.raises(CommandError, match="scratch database"):
         call_command("replay", str(cases))
     Message.objects.all().delete()
@@ -222,6 +223,10 @@ def test_the_replay_compares_the_events_filed_with_the_events_expected(db, tmp_p
     with pytest.raises(CommandError, match="1 case"):
         call_command("replay", str(cases))
     assert "MISS c1" in capsys.readouterr().out
+    Message.objects.all().delete()
+    cases.write_text(json.dumps({"cases": [{"id": "c3", "sent": {"date": "2031-03-08"}, "text": "Stretched", "expected": []}]}))
+    with pytest.raises(CommandError, match="c3: `sent` needs a time"):
+        call_command("replay", str(cases))
 
 
 # ---------------- the Friday brief ----------------

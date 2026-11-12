@@ -8,9 +8,10 @@ the right day? Each case is a message with its sent time and the practice
 events it should produce. The cases are real messages and stay in the vault;
 this command takes their path.
 
-It runs one real session per case, on a scratch database imported up to the
-day before the first message, with Telegram off. It refuses a database that
-has ever held a conversation."""
+It runs one real session per case, each in a conversation of its own so that
+no case answers with the earlier ones in mind, on a scratch database imported
+up to the day before the first message, with Telegram off. It refuses a
+database that has ever held a conversation."""
 import datetime
 import json
 from pathlib import Path
@@ -40,7 +41,6 @@ class Command(BaseCommand):
         settings.TELEGRAM_BOT_TOKEN = ""   # the credentials are the switch: nothing is sent
         call_command("seed_jobs", verbosity=0)
         reply = Job.objects.get(name="reply")
-        conversation = Conversation.objects.create(chat_id="replay")
         zone = ZoneInfo(settings.TIME_ZONE)
         cases = json.loads(options["cases"].read_text(encoding="utf-8"))["cases"]
         missed = 0
@@ -48,7 +48,11 @@ class Command(BaseCommand):
             if options["only"] and case["id"] != options["only"]:
                 continue
             sent = case["sent"]
-            sent_at = datetime.datetime.fromisoformat(f"{sent['date']}T{sent.get('time') or sent.get('assumed_time')}").replace(tzinfo=zone)
+            clock = sent.get("time") or sent.get("assumed_time")
+            if not clock:
+                raise CommandError(f"case {case['id']}: `sent` needs a time or an assumed_time")
+            sent_at = datetime.datetime.fromisoformat(f"{sent['date']}T{clock}").replace(tzinfo=zone)
+            conversation = Conversation.objects.create(chat_id=f"replay-{case['id']}")
             message = Message.objects.create(conversation=conversation, direction=Message.Direction.IN,
                                              text=case["text"], sent_at=sent_at)
             run = execute_job(reply, message_id=message.pk)
