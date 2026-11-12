@@ -40,7 +40,7 @@ def health(request):
 
 def _assessment(assessment: Assessment) -> dict:
     return {"id": assessment.pk, "at": assessment.at, "state": assessment.state, "reason": assessment.reason,
-            "evidence_ids": list(assessment.evidence.values_list("pk", flat=True))}
+            "evidence_ids": [observation.pk for observation in assessment.evidence.all()]}
 
 
 def _tracker(tracker: Tracker) -> dict:
@@ -77,17 +77,18 @@ def trackers(request):
 
 
 @api.get("/trackers/{slug}")
-def tracker_detail(request, slug: str, limit: int = 50, sourced: bool = False):
-    """sourced=true keeps only observations with a URL: a stock's news without
-    its ticks, which the price view takes from /prices instead."""
+def tracker_detail(request, slug: str, limit: int = 50, sourced: bool = False, assessments: int = 10):
+    """limit counts observations and `assessments` counts assessments: a
+    country's assessment is its whole record, so a screen that wants many
+    observations must not pull as many of those. sourced=true keeps only
+    observations with a URL: a stock's news without its ticks, which the
+    price view takes from /prices instead."""
     tracker = get_object_or_404(Tracker, slug=slug)
     recent = tracker.observations.order_by("-observed_at")
     if sourced:
         recent = recent.exclude(source_url="")
-    limit = max(1, min(limit, 500))
-    recent = recent[:limit]
-    # Assessments follow the same limit: a lane's drawer reads which facts each change cited.
-    judged = tracker.assessments.order_by("-at")[:limit]
+    recent = recent[:max(1, min(limit, 500))]
+    judged = tracker.assessments.prefetch_related("evidence").order_by("-at")[:max(1, min(assessments, 500))]
     return dict(_tracker(tracker), brief=tracker.brief,
                 recent_assessments=[_assessment(assessment) for assessment in judged],
                 recent_observations=[_observation(observation) for observation in recent])

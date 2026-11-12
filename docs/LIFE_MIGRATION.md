@@ -227,8 +227,11 @@ dependency in the image or the dashboard.
   existing one. A second build entry for the shell would avoid all three
   and contradict the decided "one React app" (D6).
 - The drawer shows one list, History: the tracker's observations through
-  the existing `GET /api/trackers/{slug}` (its assessments now follow
-  `limit` like its observations). A fact belongs to a station's history when
+  the existing `GET /api/trackers/{slug}`. Assessments have their own
+  parameter there, `assessments` (default 10), and do not follow `limit`: a
+  country's assessment is its whole record, and the screens that ask for
+  50 or 100 observations must not pull as many of those. The drawer asks
+  for as many assessments as observations. A fact belongs to a station's history when
   it names the station (`payload.station`, which the importer writes) or was
   the evidence for a change that touched it (`changed`). The vault shell's
   second list, Mentions, matched keywords against raw Inbox lines; with

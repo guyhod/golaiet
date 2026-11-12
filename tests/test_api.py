@@ -19,6 +19,17 @@ def test_tracker_endpoints(tracker):
 
 
 @pytest.mark.django_db
+def test_assessments_have_their_own_count_and_do_not_follow_limit(tracker):
+    from agent import tools
+    for number in range(12):
+        tools.record_assessment(tracker.slug, {"level": "watch", "score": number}, "Still tight.")
+    url = f"/api/trackers/{tracker.slug}"
+    assert len(Client().get(f"{url}?limit=100").json()["recent_assessments"]) == 10
+    assert len(Client().get(f"{url}?assessments=3").json()["recent_assessments"]) == 3
+    assert len(Client().get(f"{url}?limit=1&assessments=12").json()["recent_assessments"]) == 12
+
+
+@pytest.mark.django_db
 def test_focus_alerts_and_stream(tracker):
     from agent import tools
     client = Client()
