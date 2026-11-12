@@ -90,7 +90,7 @@ chat/        Conversation, Message, telegram.py (send + getUpdates), poller.py, 
 agent/       runner.py (CLI subprocess), tools.py (the functions), prompts.py,
              management/commands/mcp_tools.py (the tool server), flows/{reply,collect,assess,research,brief}.py,
              management/commands/replay.py (recorded messages through the reply flow, on a scratch database)
-api/         django-ninja read-only API (health, trackers, alerts, focus + its SSE stream)
+api/         django-ninja read-only API (health, trackers, the life board, alerts, focus + its SSE stream)
 dashboard/   Vite + React app with its own Dockerfile (node build → nginx) and nginx.conf;
              src/views/ is the view registry (feed, globe, price), src/views/globe/ the MapLibre globe,
              src/views/life/ the Life screen (view campaign_map; /life is the wall: that screen alone),
@@ -99,5 +99,5 @@ dashboard/   Vite + React app with its own Dockerfile (node build → nginx) and
 tests/       pytest-django; smoke/ (against a running stack), e2e/ (the fakes behind docker-compose.e2e.yml)
 docs/        the planning documents
 ops/         what runs outside the stack, under launchd: watch.sh (hourly health check, notification), backup.sh (nightly pg_dump);
-             both log to logs/ (ignored)
+             both log to logs/ (ignored); installing them is in the README
 ```

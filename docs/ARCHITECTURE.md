@@ -33,8 +33,8 @@ dashboard decides nothing: it draws what the database says.
 | `scheduler/` | `Job` rows define the schedule; a single process re-syncs APScheduler from the table every 30 s; `JobRun` is the run log, cost ledger and heartbeat | investment_engine `scheduler/` (models, jobs, dispatcher, market_hours) |
 | `agent/` | Builds the prompt, runs the Claude CLI headless with the MCP config, parses JSON, retries unparseable replies, aborts the whole loop on billing markers, tallies cost | investment_engine `scheduler/runner.py` + `agent_flow.py`; conflict map `research/runner.py` |
 | `agent/tools` (MCP server) | The agent's only way to touch Golaiet: typed tools over the Django ORM (§5) | new |
-| `kinds/` | One module per tracker kind: subject, payload and state schemas, ordered levels, prompts, the alert rule, default jobs, view name. `topic` (collect + judge as two jobs), `country_risk` (one research session that files sources and the record) and `stock` (ticks and the threshold rule from one shared script, news from a daily session) | conflict map `research/country.py`, investment_engine `core/monitor.py` |
-| `api/` | django-ninja: trackers, observations, assessments, focus (GET + SSE), health | both repos' `api/api.py` |
+| `kinds/` | One module per tracker kind: subject, payload and state schemas, ordered levels, prompts, the alert rule, default jobs, view name. `topic` (collect + judge as two jobs), `country_risk` (one research session that files sources and the record), `stock` (ticks and the threshold rule from one shared script, news from a daily session), and the two life kinds, which have no jobs and are filled from the conversation: `practice` (events in, the counter computed at read) and `campaign` (a small change in, the whole lane stored; `core/life.py` builds the board from both) | conflict map `research/country.py`, investment_engine `core/monitor.py` |
+| `api/` | django-ninja: trackers, observations, assessments, the life board (`/api/life`), focus (GET + SSE), health | both repos' `api/api.py` |
 | `dashboard/` | Vite + React in its own container: nginx serves the build and proxies `/api`, `/admin` and `/static` to Django. Shell (header, alert banner, main view) + a view registry keyed by tracker kind | `Life/Golaiet/Claude/dashboard-react`, conflict map `frontend/src/map` |
 
 ## 3. Data model
@@ -161,7 +161,10 @@ answered.
 | `search_observations(query, slug?, since?)` | full-text over summaries |
 | `add_note(slug, text)` | appends one dated line to the lane's own file in the vault, when Guy asks for a note; the only write outside the database |
 
-Reply sessions get all tools plus WebSearch/WebFetch. Collect sessions get
+Reply sessions get all tools plus WebSearch/WebFetch. The Friday brief runs
+on the same session with the three read tools only (`list_trackers`,
+`get_tracker`, `search_observations`) and no built-in tool: it asks, and
+records nothing. Collect sessions get
 only `record_observation` plus the web tools. Assess sessions get
 `record_assessment` and `raise_alert` and no built-in tool at all
 (`--tools ""`, probed 2026-10-10: the MCP tools stay). No session has Bash or the
@@ -340,6 +343,18 @@ runs under `docker compose` (`make stack`): `db`, `migrate`, `web`,
 `scheduler` (the Claude CLI inside, on the plan OAuth token, session store on
 the `claude_state` volume) and `dashboard`. Running since 2026-10-10. Moving
 to a NUC or VM follows investment_engine's `docs/ops/HOST_SPEC.md`.
+
+The vault is mounted into `scheduler` alone, at `/vault` (`VAULT_HOST_DIR`
+in `.env`; unset, an empty folder), for `add_note` and nothing else. The
+end-to-end stack always mounts the empty folder.
+
+Two things run outside compose, under launchd, because nothing inside the
+stack can report that the stack is down or restore a database that is gone:
+`ops/watch.sh` (hourly: reads `/api/health`, logs a line, shows a macOS
+notification when the stack does not answer or the heartbeat is older than
+90 minutes) and `ops/backup.sh` (nightly: `pg_dump` through the `db`
+container into `~/Backups/golaiet`, 30 days kept). Both log to `logs/`.
+Installing them is in the README.
 
 Telegram long polling needs no public URL, no ngrok and no webhook secret.
 Alerts are enabled by the presence of the bot token and chat id, never by a
