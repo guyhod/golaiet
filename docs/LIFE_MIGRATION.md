@@ -383,6 +383,11 @@ heartbeat is fresh within 35 minutes; with the scheduler stopped by hand a
 notification appears; last night's dump restores into a scratch database
 with the same row counts.
 
+**Review fixes in, 2026-11-12.** `ops/backup.sh` logs the dump before it
+prunes and clears a half dump left by a killed run; each script has a test;
+the install and removal steps are in the README. Nothing is installed; the
+exit check is open and is Guy's.
+
 ### Step 1 — kinds, import, the board API (2 evenings)
 
 §3.1, §3.2, §3.7 and `GET /api/life`. A spike of the pure functions already
@@ -404,6 +409,15 @@ before Step 0's exit check, on Guy's word that the Mac actions come last.
 Size: the import command is 267 lines against the 160 estimated; the 100
 over are the `--check` comparison and the dry-run report, which the estimate
 did not count.
+
+**Review fixes in, 2026-11-12.** The campaign validator checks every
+field's type, `--replace` is refused once the conversation has written,
+`--events-until` leaves out practices that start later, an unknown extras
+key is an error, and `--check` compares whole lists with the derived overdue
+checks set aside. The exit check was run again with the stricter comparison,
+on a scratch database from the real file: every key equal or one of the
+three named differences, today and on three other days. `make check`: 150
+pytest, 39 Vitest.
 
 ### Step 2 — the conversation (1½–2 evenings)
 
@@ -430,6 +444,13 @@ the CLI stubbed (`make check`: 110 pytest; `make e2e`: 4 of 4). The exit
 check itself needs Guy: the go-ahead for the replay's sessions, one
 forwarded message, one live consultation. This is not the step's line.
 
+**Review fixes in, 2026-11-12.** A lane change must cite a fact filed by
+the same run; the lane's `file` is Guy's to set and `add_note` writes only
+to an existing `.md` file, dated by the message; a life subject is merged
+field by field; the tools' results say whether a tracker is drawn; the
+replay gives each case its own conversation; the end-to-end stack never
+mounts the vault. The exit check is still open.
+
 ### Step 3 — the Life screen and the wall (2–3 evenings)
 
 §3.3.
@@ -445,6 +466,11 @@ restyled panels are checked by eye.
 the real board on a scratch database: the map, the panels and the drawer
 draw. The exit check is Guy's eye on `/life` beside the vault's page after
 the import. This is not the step's line.
+
+**Review fixes in, 2026-11-12.** A pushed focus opens its drawer once
+(keyed on the focus row's `set_at`, remembered by the browser), and a lane
+the map does not draw opens in full from Burning, the horizon, Next and the
+trail. `make e2e`: 7 of 7. The exit check is still open.
 
 ### Step 4 — Friday in Telegram (½–1 evening)
 
@@ -462,6 +488,12 @@ whether and when the previous brief was delivered. The flow is 112 lines
 against the 60 estimated: the stopping rule and the week's facts were not
 counted. The exit check (a brief run by hand, one answer) needs Guy. This is
 not the step's line.
+
+**Review fixes in, 2026-11-12.** The stopping rule counts each delivered
+brief once, never judges its own switch-off notice, starts again after the
+job is re-enabled, reads the verdict line leniently and stays on when the
+notice does not send (§3.6). How the job is run by hand is in the README.
+The exit check is still open.
 
 ### Step 5 — cutover and the first week (1 evening + 7 days)
 
