@@ -78,7 +78,7 @@ def test_the_reply_is_told_when_the_message_was_sent_in_jerusalem(session, setti
     run = JobRun.objects.create(job=Job.objects.create(name="reply", kind="reply", trigger="manual", schedule="", target="x"))
     reply.run(run.job, run, message_id=inbound.pk)
     call = session[0]
-    assert call["prompt"] == "[Sent Saturday 2031-03-08 08:22, Jerusalem time]\nStretched last night"
+    assert call["prompt"] == "[Sent Saturday 2031-03-08 08:22, Asia/Jerusalem time]\nStretched last night"
     assert call["model"] == "stronger" and call["locked"] and not flows.conversation_turn.locked()
     assert Conversation.objects.get().session_id.startswith("1111")
 
@@ -94,6 +94,28 @@ def test_the_listing_is_one_short_row_per_tracker(tracker):
     assert renamed["changed"] == ["title", "status"] and Tracker.objects.get(slug="stretch").title == "Stretching, mornings only"
     with pytest.raises(ValueError, match="title"):
         tools.update_tracker("stretch", title="  ")
+    with pytest.raises(ValueError, match="has no schedule"):
+        tools.update_tracker("stretch", cadence="daily")
+
+
+def test_a_tracker_the_board_has_no_room_for_says_so(db):
+    for number in range(8):
+        made = tools.create_tracker(f"habit-{number}", f"Habit {number}", "practice",
+                                    {"color": "green", "started": "2031-03-01", "rank": number}, "Counts daily.")
+    assert made["on_board"] is False and tools.get_tracker("habit-0")["on_board"] is True
+    assert tools.create_tracker("garden", "Garden", "campaign", {}, "Bed by bed.")["on_board"] is False, "no stations yet"
+
+
+def test_a_lane_changes_only_on_a_fact_filed_in_the_same_turn(db, monkeypatch):
+    tools.create_tracker("garden", "Garden", "campaign", {}, "Bed by bed.")
+    earlier = tools.record_observation("garden", "2031-03-01", "", "The beds want digging.")
+    turn = JobRun.objects.create(job=Job.objects.create(name="reply", kind="reply", trigger="manual", schedule="", target="x"))
+    monkeypatch.setenv("GOLAIET_JOB_RUN_ID", str(turn.pk))
+    change = {"stations": [{"id": "dig", "label": "Dig the beds", "track": "Beds"}]}
+    with pytest.raises(ValueError, match="filed in this conversation turn"):
+        tools.record_assessment("garden", change, "He said so.", [earlier["id"]])
+    said = tools.record_observation("garden", "2031-03-08", "", "Dig the beds next.")
+    assert tools.record_assessment("garden", change, "He said so.", [earlier["id"], said["id"]])["state"]["changed"] == ["dig"]
 
 
 def test_a_proposal_cites_what_was_said_and_changes_nothing_else(db):
@@ -112,7 +134,8 @@ def garden(db, settings, tmp_path):
     """A lane whose notes go to a file in a vault that is a temporary folder, never the real one."""
     settings.VAULT_DIR = str(tmp_path)
     (tmp_path / "Garden.md").write_text("# Garden\n\nFirst line, no newline at the end", encoding="utf-8")
-    tools.create_tracker("garden", "Garden", "campaign", {"file": "Garden.md"}, "Bed by bed.")
+    Tracker.objects.create(slug="garden", title="Garden", kind="campaign", view="campaign_map", brief="Bed by bed.",
+                           subject={"file": "Garden.md", "short": "Beds", "rank": 2})
     return tmp_path / "Garden.md"
 
 
@@ -125,20 +148,38 @@ def test_a_note_is_appended_as_one_dated_line(garden, monkeypatch):
                                                   "- 2031-03-10: the roses need lime\n- 2031-03-10: and the gate squeaks\n")
 
 
+def test_the_note_is_dated_by_when_the_message_was_sent(garden, chat, monkeypatch):
+    sent = poller.store_inbound(update(9, "Note for the garden: lime the roses"))
+    monkeypatch.setenv("GOLAIET_MESSAGE_ID", str(sent.pk))
+    assert tools.add_note("garden", "lime the roses")["line"] == "- 2031-03-08: lime the roses"
+
+
+def test_where_a_lanes_notes_go_is_not_the_agents_to_set(garden):
+    with pytest.raises(ValueError, match="Guy's to set"):
+        tools.create_tracker("boat", "Boat", "campaign", {"file": "TODO.md"}, "The boat.")
+    for subject in ({"file": "TODO.md"}, {"file": None}):
+        with pytest.raises(ValueError, match="Guy's to set"):
+            tools.update_tracker("garden", subject=subject)
+    kept = tools.update_tracker("garden", subject={"file": "Garden.md", "layout": "wide", "short": None})
+    assert kept["subject"] == {"file": "Garden.md", "rank": 2, "layout": "wide"}, "a partial subject keeps the rest; null removes"
+
+
 def test_a_note_is_refused_when_it_has_nowhere_safe_to_go(garden, settings, tmp_path):
     before = garden.read_bytes()
     tools.create_tracker("boat", "Boat", "campaign", {}, "The boat.")
-    tools.create_tracker("shed", "Shed", "campaign", {"file": "../outside.md"}, "The shed.")
-    tools.create_tracker("pond", "Pond", "campaign", {"file": "Pond.md"}, "The pond.")
+    for slug, file in (("shed", "../outside.md"), ("pond", "Pond.md"), ("list", "list.txt")):
+        Tracker.objects.create(slug=slug, title=slug, kind="campaign", view="campaign_map", brief="-", subject={"file": file})
     (tmp_path.parent / "outside.md").write_text("not in the vault")
-    for slug, message in (("boat", "names no vault file"), ("shed", "inside the vault"), ("pond", "existing file"),
-                          ("garden", "must not be empty")):
+    (tmp_path / "list.txt").write_text("a list, not a note file")
+    for slug, message in (("boat", "names no vault file"), ("shed", "inside the vault"), ("pond", "existing .md file"),
+                          ("list", "existing .md file"), ("garden", "must not be empty")):
         with pytest.raises(ValueError, match=message):
             tools.add_note(slug, "" if slug == "garden" else "a note")
     settings.VAULT_DIR = ""
     with pytest.raises(ValueError, match="not reachable"):
         tools.add_note("garden", "a note")
     assert garden.read_bytes() == before and (tmp_path.parent / "outside.md").read_text() == "not in the vault"
+    assert (tmp_path / "list.txt").read_text() == "a list, not a note file"
 
 
 def test_a_note_that_did_not_reach_the_file_is_reported_not_believed(garden, monkeypatch):

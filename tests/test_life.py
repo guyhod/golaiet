@@ -169,6 +169,24 @@ def test_flags_carry_reasons_and_the_level_follows_them():
     ({"changed": ["shed"]}, "derived"),
     ({"mood": "good"}, "unknown fields"),
     ({"next": {"text": ""}}, "state.next"),
+    ({"next": {"text": "Buy paint", "hot": "no"}}, "state.next"),
+    ({"next": "Buy paint"}, "state.next must be an object"),
+    ({"stations": [{"id": "shed", "rank": "2"}]}, "rank must be a whole number"),
+    ({"stations": [{"id": "shed", "rank": True}]}, "rank must be a whole number"),
+    ({"focus": True, "focus_why": "spring", "focus_rank": "1"}, "focus_rank must be a whole number"),
+    ({"burning": "yes", "burning_why": "rain"}, "burning must be true or false"),
+    ({"note": 7}, "note must be text"),
+    ({"stations": [{"id": "shed", "focus": True}]}, "in focus without a reason"),
+    ({"stations": [{"id": "shed", "options": "paint or stain"}]}, "list of strings"),
+    ({"stations": [{"id": "shed", "join": "xor"}]}, "join must be one of"),
+    ({"stations": [{"id": "gate", "label": "Hang the gate", "track": 2}]}, "`track` must be text"),
+    ({"stations": {"id": "shed"}}, "state.stations must be a list"),
+    ({"stations": ["shed"]}, "state.stations must be a list"),
+    ({"dropped": "shed"}, "state.dropped must be a list"),
+    ({"tracks": {"stations": []}}, "state.tracks must be a list"),
+    ({"tracks": [{"stations": "none"}], "dropped": ["dig", "fence", "shed"]}, "stations must be a list"),
+    ({"tracks": [{"stations": ["dig"]}], "dropped": ["dig", "fence", "shed"]}, "must be an object"),
+    ({"tracks": [{"caption": 3, "stations": []}], "dropped": ["dig", "fence", "shed"]}, "caption must be text"),
     ({"tracks": [{"stations": [{"id": "dig", "label": "Dig the beds", "state": "ahead"}]}]}, "would vanish"),
     ({"tracks": LANE["tracks"], "stations": []}, "not both"),
     ({"tracks": [{"stations": [{"id": "dig", "label": "A", "state": "ahead"}, {"id": "dig", "label": "B", "state": "ahead"}]}],
@@ -199,6 +217,30 @@ def test_the_tool_stores_the_whole_lane_from_a_small_change(db):
     assert len(campaign.stations_of(Tracker.objects.get(slug="garden").assessments.first().state)) == 3
     with pytest.raises(ValueError):
         campaign.validate_subject({"layout": "tall"})
+
+
+def test_a_lane_that_was_accepted_can_always_be_drawn(db):
+    """Every field the board sorts or compares, filled in: what the validator lets through, the board draws."""
+    tools.create_tracker("garden", "Garden", "campaign", {"short": "Garden"}, "The garden, bed by bed.")
+    said = tools.record_observation("garden", "2031-03-01", "", "Everything about the garden at once.")
+    tools.record_assessment("garden", {
+        **LANE, "target_by": "2031-04-01", "note": "south side first", "focus": True, "focus_rank": 2, "focus_why": "spring",
+        "burning": True, "burning_rank": 1, "burning_since": "Mar 1", "burning_why": "frost", "next": {"text": "Buy lime"},
+        "tracks": [{"caption": "Beds", "mini": True, "stations": [
+            {**LANE["tracks"][0]["stations"][0], "rank": 0, "note": "done early"},
+            {**LANE["tracks"][0]["stations"][1], "rank": 2, "check": "2031-03-05", "burning": True, "burning_why": "it leans",
+             "burning_title": "The fence", "focus": True, "focus_why": "the goats", "focus_title": "Fence first"},
+            {**LANE["tracks"][0]["stations"][2], "options": ["paint", "stain"], "requires": ["fence"], "join": "and",
+             "join_next": "or", "state": "decision"}]}]}, "He said all of it.", [said["id"]])
+    for bad in ({"stations": [{"id": "fence", "rank": "2"}]}, {"focus_rank": "1"}, {"next": {"text": "Buy lime", "hot": "no"}}):
+        with pytest.raises(ValueError):
+            tools.record_assessment("garden", bad, "A slip.", [said["id"]])
+    assert Client().get("/api/life").status_code == 200
+    drawn = life.board(DAY)
+    assert drawn["lanes"][0]["_meta"] == "1 / 3 · by Apr 1" and drawn["burning"][0]["since"] == "Mar 1"
+    tools.record_assessment("garden", {"burning": None, "burning_why": None, "focus": None, "focus_why": None},
+                            "It passed.", [said["id"]])
+    assert [(item["title"], item["why"]) for item in life.board(DAY)["focus"]] == [("Fence first", "the goats")]
 
 
 # ---------------- the import and the board ----------------
@@ -313,6 +355,40 @@ def test_a_second_import_is_refused_and_replace_starts_over(imported, tracker):
     assert Tracker.objects.get(slug="stretch").observations.count() == 1
     assert Tracker.objects.get(slug="no_snacks").observations.count() == 1
     assert Tracker.objects.filter(slug=tracker.slug).exists(), "replace drops life trackers only"
+
+
+def test_replace_is_refused_once_the_conversation_has_recorded(imported, monkeypatch):
+    progress, extras = imported
+    turn = JobRun.objects.create(job=Job.objects.create(name="reply", kind="reply", trigger="manual", schedule="", target="x"))
+    monkeypatch.setenv("GOLAIET_JOB_RUN_ID", str(turn.pk))
+    tools.record_observation("stretch", "2031-03-09", "", "Stretched.")
+    with pytest.raises(CommandError, match="1 observation.s. and 0 lane change"):
+        call_command("import_life", str(progress), "--replace", verbosity=0)
+    assert Tracker.objects.get(slug="stretch").observations.count() == 3
+    call_command("import_life", str(progress), "--replace", "--force", verbosity=0)
+    assert Tracker.objects.get(slug="stretch").observations.count() == 2
+
+
+def test_the_replays_starting_state_leaves_out_what_did_not_exist_yet(db, vault, capsys):
+    call_command("import_life", str(vault[0]), "--events-until", "2031-03-03")
+    assert "left out: practice no_snacks: it starts after 2031-03-03" in capsys.readouterr().out
+    assert not Tracker.objects.filter(slug="no_snacks").exists()
+    assert [tile["n"] >= 0 for tile in life.board(datetime.date(2031, 3, 3))["pulse"]] == [True]
+    assert Tracker.objects.get(slug="stretch").observations.count() == 1
+
+
+def test_an_extras_key_nothing_reads_and_a_lane_that_is_not_valid_are_refused(db, vault):
+    progress, extras = vault
+    extras.write_text(json.dumps({**EXTRAS, "rules": ["be kind"], "practices": {"strech": "typo"},
+                                  "lanes": {"garden": {"notes": "x"}, "orchard": {}}}))
+    with pytest.raises(CommandError, match="does not read: rules, practices.strech, lanes.garden.notes, lanes.orchard"):
+        call_command("import_life", str(progress), "--extras", str(extras), verbosity=0)
+    broken = json.loads(json.dumps(PROGRESS))
+    broken["campaigns"][0]["tracks"][0]["stations"][2]["rank"] = "3"
+    progress.write_text("```json\n" + json.dumps(broken) + "\n```\n", encoding="utf-8")
+    with pytest.raises(CommandError, match="nothing was imported: station 'shed'.rank must be a whole number"):
+        call_command("import_life", str(progress), verbosity=0)
+    assert Tracker.objects.count() == 0
 
 
 def test_the_import_never_takes_another_trackers_slug(db, vault):

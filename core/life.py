@@ -66,7 +66,8 @@ def _flagged(lanes: list[dict], day: datetime.date) -> tuple[list[dict], list[di
                                     "why": station.get("burning_why", ""), "path": path, "rank": 99,
                                     "campaign": lane["id"], "station": station["id"]})
                 if station.get("focus") and not lane.get("focus"):
-                    focus.append({"title": station.get("focus_title") or _station_title(lane, station), "why": "",
+                    focus.append({"title": station.get("focus_title") or _station_title(lane, station),
+                                  "why": station.get("focus_why", ""),
                                   "rank": 99, "campaign": lane["id"], "station": station["id"]})
     for lane in lanes:
         for due, station in _checks(lane):
@@ -145,7 +146,13 @@ def _drawn(lanes: list[dict]) -> tuple[list[dict], list[str]]:
     return shown, quiet
 
 
-def board(day: datetime.date) -> dict:
+def on_board(slug: str) -> bool:
+    """Whether the tracker is drawn today: a practice in the pulse row, a campaign on the map."""
+    drawn = board(today())
+    return slug in [item["id"] for item in drawn["pulse"] + drawn["lanes"]]
+
+
+def board(day: datetime.date, caps: dict = CAPS) -> dict:
     trackers = sorted(Tracker.objects.filter(kind__in=("practice", "campaign"),
                                              status__in=(Tracker.Status.ACTIVE, Tracker.Status.PAUSED)),
                       key=lambda tracker: (tracker.subject.get("rank", 999), tracker.slug))

@@ -15,6 +15,7 @@ from django.conf import settings
 from django.core.validators import URLValidator
 from django.utils import timezone
 
+from chat.models import Message
 from core import kinds, life
 from core.models import Alert, Assessment, Focus, Observation, Tracker
 from scheduler.models import Job
@@ -33,13 +34,23 @@ def _message_id() -> int | None:
 def _tracker_dict(tracker: Tracker) -> dict:
     latest = tracker.observations.order_by("-observed_at").first()
     judged = tracker.assessments.order_by("-at").first()
-    return {
+    described = {
         "slug": tracker.slug, "title": tracker.title, "kind": tracker.kind, "status": tracker.status,
         "subject": tracker.subject, "cadence": cadence_of(tracker),
         "observations": tracker.observations.count(),
         "latest_observation_at": latest.observed_at.isoformat() if latest else None,
         "latest_assessment": _assessment_dict(judged) if judged else None,
     }
+    if tracker.kind in kinds.LIFE:
+        described["on_board"] = life.on_board(tracker.slug)
+    return described
+
+
+def _agent_subject(kind_module, subject: dict, stored: dict) -> None:
+    """Refuses a subject from the agent that sets or changes a field the kind keeps for Guy."""
+    for field in getattr(kind_module, "OWNER_FIELDS", ()):
+        if field in subject and subject[field] != stored.get(field):
+            raise ValueError(f"subject.{field} is Guy's to set, in admin: leave it out and tell him")
 
 
 def _assessment_dict(assessment: Assessment) -> dict:
@@ -160,10 +171,13 @@ def create_tracker(slug: str, title: str, kind: str, subject: dict, brief: str, 
     event and how it is dated).
     cadence: hourly, daily or weekly (stock news: daily; prices tick on their own every 15 minutes). A practice
     and a campaign have no schedule and ignore it.
-    Creates the tracker and its jobs; returns when the first run is."""
+    Creates the tracker and its jobs; returns when the first run is. For a practice or a campaign the result
+    carries on_board: false means it is recorded and not drawn (the pulse row and the map are full, or a lane
+    has no stations yet); say so in the reply."""
     if Tracker.objects.filter(slug=slug).exists():
         raise ValueError(f"tracker {slug!r} already exists; use update_tracker")
     kind_module = kinds.get(kind)
+    _agent_subject(kind_module, subject, {})
     subject = kind_module.validate_subject(subject)
     if cadence not in kinds.CADENCES:
         raise ValueError(f"cadence must be one of {', '.join(kinds.CADENCES)}")
@@ -178,10 +192,12 @@ def create_tracker(slug: str, title: str, kind: str, subject: dict, brief: str, 
 def update_tracker(slug: str, brief: str | None = None, cadence: str | None = None, status: str | None = None,
                    subject: dict | None = None, title: str | None = None) -> dict:
     """Change an existing tracker: a new brief (replaces the old one in full), a new cadence
-    (hourly, daily, weekly), its status (active; paused: off the board, still recorded; archived), a new
-    subject (the kind's fields in full, e.g. a stock's new good_below, a country's desk lenses), or a new
-    title (a practice is renamed when its definition changes). Omitted fields are untouched."""
+    (hourly, daily, weekly; a practice and a campaign have none), its status (active; paused: off the board,
+    still recorded; archived), a new subject (the kind's fields in full, e.g. a stock's new good_below, a
+    country's desk lenses; for a practice or a campaign only the fields that change, null to remove one), or a
+    new title (a practice is renamed when its definition changes). Omitted fields are untouched."""
     tracker = Tracker.objects.get(slug=slug)
+    kind_module = kinds.get(tracker.kind)
     changed = []
     if title is not None:
         if not title.strip():
@@ -189,7 +205,12 @@ def update_tracker(slug: str, brief: str | None = None, cadence: str | None = No
         tracker.title = title.strip()
         changed.append("title")
     if subject is not None:
-        tracker.subject = kinds.get(tracker.kind).validate_subject(subject)
+        _agent_subject(kind_module, subject, tracker.subject)
+        if tracker.kind in kinds.LIFE:
+            # A life subject holds presentation the agent did not write (the lane's place on the map,
+            # its short name), so a partial subject changes the fields it names and keeps the rest.
+            subject = {field: value for field, value in {**tracker.subject, **subject}.items() if value is not None}
+        tracker.subject = kind_module.validate_subject(subject)
         changed.append("subject")
     if brief is not None:
         if not brief.strip():
@@ -204,6 +225,8 @@ def update_tracker(slug: str, brief: str | None = None, cadence: str | None = No
     if cadence is not None:
         if cadence not in kinds.CADENCES:
             raise ValueError(f"cadence must be one of {', '.join(kinds.CADENCES)}")
+        if not kind_module.jobs(kind_module.validate_subject(tracker.subject)):
+            raise ValueError(f"a {tracker.kind} has no schedule: nothing runs for it, so it has no cadence to change")
         changed.append("cadence")
     tracker.save()
     if subject is not None or cadence is not None:
@@ -251,9 +274,13 @@ def record_assessment(slug: str, state: dict, reason: str, evidence_ids: list[in
     """Record your judgment of a tracker; judgments are kept, never edited. state: the kind's fields
     (topic: {"level": quiet|watch|elevated|critical, "score": 0-100 optional}; country_risk: the record the
     research request describes; campaign: only what changes, e.g. {"stations": [{"id": "s2", "state": "passed",
-    "date": "YYYY-MM-DD"}]}, a new station as {"id", "label", "track"}, lane fields such as check, burning with
-    burning_why, focus with focus_why, next {"text", "hot"}, null to remove one, "dropped": [ids]; the lane is
-    stored whole and must cite at least one observation of what Guy said). reason: two to four sentences
+    "date": "YYYY-MM-DD"}]}. A station's state is passed (with the date it happened), current, ahead, proposed,
+    decision or ref. A new station is {"id", "label", "track": the caption of its track, "after": the id it
+    follows, optional}. Lane fields: check, target_by, note, burning with burning_why, focus with focus_why,
+    next {"text", "hot"}; a station takes burning and focus with their reasons too; null removes a field;
+    "dropped": [ids] removes stations; "tracks": [{"caption", "stations": [...]}] replaces the whole lane, to
+    regroup it. level and changed are derived: leave them out. The lane is stored whole, and a change must cite
+    an observation of what Guy said, filed in this same turn). reason: two to four sentences
     citing dates and figures. evidence_ids: ids of this tracker's observations you relied on.
     A change of level raises an alert to Guy by the kind's rule; you need not raise one yourself."""
     tracker = Tracker.objects.get(slug=slug)
@@ -268,7 +295,7 @@ def record_assessment(slug: str, state: dict, reason: str, evidence_ids: list[in
     if missing:
         raise ValueError(f"evidence_ids are not observations of {slug}: {', '.join(map(str, sorted(missing)))}")
     if hasattr(kind_module, "check_evidence"):
-        kind_module.check_evidence(evidence)
+        kind_module.check_evidence(evidence, _run_id())
     assessment, alert = judge(tracker, state, reason, evidence, job_run_id=_run_id())
     return dict(_assessment_dict(assessment), alert=_alert_dict(alert) if alert else None)
 
@@ -309,8 +336,8 @@ def raise_alert(slug: str, level: str, text: str) -> dict:
 
 def set_focus(slug: str | None = None, view_params: dict | None = None, note: str = "") -> dict:
     """Move the dashboard. slug: show this tracker in its own view; omit it to return to the overview of
-    every tracker. view_params: parameters of that view, if it takes any. note: one short line shown on
-    screen with it, e.g. what Guy asked."""
+    every tracker. view_params: parameters of that view, if it takes any (a campaign: {"station": id} opens
+    that station). note: one short line shown on screen with it, e.g. what Guy asked."""
     focus = Focus.current()
     tracker = Tracker.objects.get(slug=slug) if slug else None
     focus.tracker = tracker
@@ -323,8 +350,9 @@ def set_focus(slug: str | None = None, view_params: dict | None = None, note: st
 
 
 def add_note(slug: str, text: str) -> dict:
-    """Append one dated line to the lane's own file in Guy's vault. Only when he asks for a note: what a
-    tracker records is not copied there. slug: a campaign whose subject names its file. text: the note, his words."""
+    """Append one line, dated the day his message was sent, to the lane's own file in Guy's vault. Only when he
+    asks for a note: what a tracker records is not copied there. slug: a campaign whose subject names its file
+    (Guy sets it; you cannot). text: the note, his words."""
     tracker = Tracker.objects.get(slug=slug)
     if not text.strip():
         raise ValueError("text must not be empty")
@@ -334,10 +362,13 @@ def add_note(slug: str, text: str) -> dict:
         raise ValueError(f"{slug} names no vault file (subject.file); ask Guy which file its notes go to")
     vault = Path(settings.VAULT_DIR).resolve()
     target = (vault / tracker.subject["file"]).resolve()
-    if not target.is_relative_to(vault) or not target.is_file():
-        raise ValueError(f"{tracker.subject['file']} is not an existing file inside the vault")
+    if not target.is_relative_to(vault) or not target.is_file() or target.suffix != ".md":
+        raise ValueError(f"{tracker.subject['file']} is not an existing .md file inside the vault")
     before = target.read_bytes()
-    line = f"- {life.today().isoformat()}: {' '.join(text.split())}\n"
+    # Dated like everything else Guy reports: by when he sent the message, not by when it was handled.
+    message = Message.objects.filter(pk=_message_id()).first()
+    day = message.sent_at.astimezone(ZoneInfo(settings.TIME_ZONE)).date() if message else life.today()
+    line = f"- {day.isoformat()}: {' '.join(text.split())}\n"
     written = (("" if not before or before.endswith(b"\n") else "\n") + line).encode("utf-8")
     with target.open("ab") as handle:
         handle.write(written)

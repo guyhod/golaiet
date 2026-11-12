@@ -26,7 +26,7 @@ def prompt(message: Message) -> str:
     run on UTC and the model has no clock, so "today" and "last night" are
     counted from this line, never from now."""
     sent = message.sent_at.astimezone(ZoneInfo(settings.TIME_ZONE))
-    return f"[Sent {sent:%A %Y-%m-%d %H:%M}, Jerusalem time]\n{message.text}"
+    return f"[Sent {sent:%A %Y-%m-%d %H:%M}, {settings.TIME_ZONE} time]\n{message.text}"
 
 
 def run(job, run, *, message_id: int) -> dict:

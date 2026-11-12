@@ -175,14 +175,20 @@ dependency in the image or the dashboard.
   - derived on write: `level` (burning, focus or steady) and `changed` (the
     ids this change touched);
   - refused, loudly, so the agent can fix and call again: two `current` in
-    one track, a duplicate id, an unknown state or field, a date that is not
-    ISO, a station passed without the `date` it happened, a burning or focus
-    flag without its reason, `level` or `changed` passed in. The kind has no
-    clock: a pass says which day.
-- A campaign assessment must cite at least one observation of that lane:
-  the fact in Guy's words, filed in the same conversation. This is the
-  decided rule that only Guy promotes (D10) and the vault's first rule (no
-  status that cannot be verified), enforced in `record_assessment`.
+    one track, a duplicate id, an unknown state or field, a field of the
+    wrong type (a rank that is text, a flag that is not true or false), a
+    date that is not ISO, a station passed without the `date` it happened, a
+    burning or focus flag without its reason, on a lane or on a station,
+    `level` or `changed` passed in. The kind has no clock: a pass says which
+    day. A state that was accepted can always be drawn: the board never
+    fails on a stored lane.
+- A campaign assessment must cite at least one observation of that lane
+  filed by the run that makes the change: the fact in Guy's words, from the
+  message being answered. Earlier observations may be cited beside it, not
+  instead of it; the import, which has no run, cites the log rows it wrote.
+  This is the decided rule that only Guy promotes (D10) and the vault's
+  first rule (no status that cannot be verified), enforced in
+  `record_assessment`.
 - What the agent adds on its own is a proposal (D10 as amended on
   2026-11-11): a station in state `proposed`, on the lane it belongs to or
   on a lane the agent opens for a subject that came up, with the message it
@@ -247,7 +253,8 @@ dependency in the image or the dashboard.
 | Tool | Change | Why |
 |---|---|---|
 | `list_trackers(kind=None)` | one compact row per tracker; filter by kind | §1: the listing does not fit a tool result |
-| `update_tracker(…, title=None)` | a title can change | a practice gets renamed when its definition does |
+| `update_tracker(…, title=None)` | a title can change; a life tracker's subject is merged field by field, `null` removes | a practice gets renamed when its definition does; a partial subject must not drop the lane's place on the map |
+| `create_tracker`, `update_tracker`, `get_tracker` | a life tracker's result carries `on_board` | a practice beyond the pulse row's seven is recorded and not drawn, and the reply should say so |
 | `record_assessment` | calls the kind's evidence rule when it has one; `campaign` does | §3.2 |
 | `create_tracker` | `cadence` gets a default; a kind with no jobs ignores it | life kinds have no schedule |
 | `record_observation`, `create_tracker` | wording: the new kinds' fields; for life, `summary` is Guy's words | the docstring is what the model reads |
@@ -261,8 +268,9 @@ dependency in the image or the dashboard.
   lane, then record only what changes, citing it. A task is a station.
   Taking a tracker off the board pauses it; it is still recorded. Say what
   you recorded: tracker, date and the new count or state, in one line. When
-  the tracker or the date is unclear, ask before filing. A mistake is
-  retracted, not edited. The conversation is not only reports: questions and
+  the tracker or the date is unclear, ask before filing. Nothing is edited:
+  a wrong practice entry is retracted, a wrong change to a lane is corrected
+  by a new change. The conversation is not only reports: questions and
   consultations on any subject are answered here. What a conversation brings
   up that belongs on the board and that he did not ask for, add as a
   proposal: a station in state `proposed`, on its lane or on a new one, and
@@ -280,10 +288,15 @@ dependency in the image or the dashboard.
 
 `VAULT_DIR` is a setting; compose mounts the vault into the scheduler
 container only. One tool writes there, when Guy asks for a note: `add_note`
-appends a dated line to the file named in the lane's `subject.file` and
-checks that the file grew by exactly what it wrote (LINEAGE §3: check the
-byte count before trusting the file system). What a tracker records is not
-copied into topic files. `TODO.md` is neither read nor written.
+appends a line, dated the day the message was sent, to the file named in the
+lane's `subject.file` and checks that the file grew by exactly what it wrote
+(LINEAGE §3: check the byte count before trusting the file system). The
+lane's `file` is Guy's to set, in admin or by the import: the agent's tools
+refuse a subject that sets or changes it, and the tool writes only to an
+existing `.md` file, so no conversation can point a note at another file.
+What a tracker records is not copied into topic files. `TODO.md` is neither
+read nor written. The end-to-end stack mounts an empty folder in the vault's
+place whatever `.env` says.
 
 ### 3.6 Friday
 
