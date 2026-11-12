@@ -278,7 +278,7 @@ def test_the_brief_goes_out_from_the_conversations_own_session(week, chat, monke
     call = calls[0]
     assert call["resume"].startswith("2222") and call["locked"] and call["tools"] == []
     assert all(tool.rpartition("__")[2] in ("list_trackers", "get_tracker", "search_observations") for tool in call["allowed_tools"])
-    assert chat == ["The beds are dug.\n1. Move the fence date?"] and report["summary"].startswith("answered=first delivered")
+    assert chat == ["The beds are dug.\n1. Move the fence date?"] and report["summary"].startswith("judged=none answered=first delivered")
     assert Conversation.objects.get().session_id.startswith("3333")
     assert Message.objects.get(direction="out").job_run.job == week
     _, calls = brief_run(week, monkeypatch, "Nothing new.\nANSWERED: yes")
@@ -300,6 +300,47 @@ def test_an_answer_or_a_missing_verdict_breaks_the_run_of_unanswered(week, chat,
         brief_run(week, monkeypatch, answer)
     week.refresh_from_db()
     assert week.enabled and brief.SWITCHED_OFF not in chat
+
+
+def test_a_friday_that_did_not_go_out_is_not_a_second_no_for_the_same_brief(week, monkeypatch):
+    lands = {"now": True}
+    sent = []
+    monkeypatch.setattr(telegram, "send", lambda text, **kw: (sent.append(text) or len(sent)) if lands["now"] else None)
+    brief_run(week, monkeypatch, "Brief one.\nANSWERED: first")
+    brief_run(week, monkeypatch, "Brief two.\nANSWERED: no")
+    lands["now"] = False
+    brief_run(week, monkeypatch, "Lost on the way.\nANSWERED: no")
+    lands["now"] = True
+    brief_run(week, monkeypatch, "Brief three.\nANSWERED: no")
+    week.refresh_from_db()
+    assert week.enabled, "two delivered briefs were judged, not three"
+    lands["now"] = False
+    report, _ = brief_run(week, monkeypatch, "Brief four.\nANSWERED: no")
+    week.refresh_from_db()
+    assert report["failed"] and week.enabled, "a switch-off nobody was told of does not happen"
+    lands["now"] = True
+    brief_run(week, monkeypatch, "Brief four.\nANSWERED: no")
+    week.refresh_from_db()
+    assert not week.enabled and sent[-1] == brief.SWITCHED_OFF and "in the admin" in brief.SWITCHED_OFF
+
+    week.enabled = True
+    week.save()
+    _, calls = brief_run(week, monkeypatch, "Back again.\nANSWERED: first")
+    assert "No brief was delivered before this one" in calls[0]["prompt"], "the switch-off notice is not a brief to judge"
+    for _ in range(2):
+        brief_run(week, monkeypatch, "Another.\nANSWERED: no")
+    week.refresh_from_db()
+    assert week.enabled, "the count starts again after a switch-off"
+    brief_run(week, monkeypatch, "Another.\nANSWERED: no")
+    week.refresh_from_db()
+    assert not week.enabled
+
+
+@pytest.mark.parametrize("line, verdict", [("**Answered:** No.", "no"), ("answered - YES", "yes"), ("`ANSWERED: first`", "first"),
+                                           ("ANSWERED: perhaps", "unknown")])
+def test_the_verdict_line_is_read_leniently_and_never_sent(week, chat, monkeypatch, line, verdict):
+    report, _ = brief_run(week, monkeypatch, f"The beds are dug.\n1. Move the fence date?\n\n{line}")
+    assert chat == ["The beds are dug.\n1. Move the fence date?"] and f"answered={verdict} " in report["summary"]
 
 
 def test_the_brief_skips_an_empty_board_and_a_failed_session_sends_nothing(chat, monkeypatch, db):

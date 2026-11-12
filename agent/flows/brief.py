@@ -10,7 +10,13 @@ unanswered for weeks while everything else went on: after three delivered
 briefs in a row with no question taken up within 48 hours, the job switches
 itself off and says so once. Whether a message took up a question is a
 reading of the conversation, so the session that holds the conversation
-gives it, as one last line the flow strips before sending."""
+gives it, as one last line the flow strips before sending.
+
+Each delivered brief gets one verdict. A run's summary starts with the brief
+it judged (`judged=<message id> answered=<verdict>`), so a Friday whose brief
+did not go out is not a second "no" for the brief before it. The switch-off
+notice is not a brief, and after it the count starts again: when Guy enables
+the job, only briefs delivered since then are counted."""
 import datetime
 import re
 from zoneinfo import ZoneInfo
@@ -30,9 +36,12 @@ from scheduler.models import JobRun
 ALLOWED_TOOLS = ["mcp__golaiet__list_trackers", "mcp__golaiet__get_tracker", "mcp__golaiet__search_observations"]
 TOOLS: list[str] = []
 UNANSWERED_IN_A_ROW = 3
-VERDICT = re.compile(r"\n?^ANSWERED: (yes|no|first)\s*$", re.M)
+# Any line that starts with the word, whatever the case, markup or punctuation around it: the model
+# writes "**Answered:** No." as readily as the form it was asked for, and the line is never for Guy.
+VERDICT = re.compile(r"^[\s*_`>#-]*answered\b[\s*_`:=-]*(yes|no|first)?.*$\n?", re.I | re.M)
+JUDGED = re.compile(r"^judged=(\d+) answered=(\w+)")
 SWITCHED_OFF = ("The Friday brief is switched off: three in a row went by with no question taken up. "
-                "Tell me to bring it back and I will.")
+                "To bring it back, tick `enabled` on the job `brief` in the admin, under Jobs.")
 
 
 def week_of(day: datetime.date) -> str:
@@ -69,7 +78,7 @@ def prompt(day: datetime.date, previous: Message | None) -> str:
         before = (f"Your previous brief was delivered on {sent:%A %Y-%m-%d %H:%M}. If a message of Guy's within 48 hours of "
                   "it took up one of its questions, end with the line ANSWERED: yes; if none did, ANSWERED: no")
     return (
-        f"[Scheduled: the Friday brief, {day:%A %Y-%m-%d}, Jerusalem time. Guy did not write this message.]\n"
+        f"[Scheduled: the Friday brief, {day:%A %Y-%m-%d}, {settings.TIME_ZONE} time. Guy did not write this message.]\n"
         "Write Guy's weekly brief from the rows below; use the read tools if a line needs its detail. Keep it short "
         "enough for a phone: what passed, what moved, what is stuck, then at most three questions, numbered, each one "
         "answerable in a line. Ask about what only he can say: an overdue check to move or drop, a proposal to keep "
@@ -83,11 +92,17 @@ def run(job, run) -> dict:
     conversation = Conversation.objects.filter(chat_id=str(settings.TELEGRAM_CHAT_ID)).first()
     if conversation is None or not Tracker.objects.filter(kind__in=kinds.LIFE).exists():
         return {"summary": "skipped: no conversation or no life trackers yet"}
-    delivered = Message.objects.filter(job_run__job=job, direction=Message.Direction.OUT, telegram_message_id__isnull=False)
+    sent = Message.objects.filter(job_run__job=job, direction=Message.Direction.OUT, telegram_message_id__isnull=False)
+    switched_off = sent.filter(text=SWITCHED_OFF).order_by("-created_at").first()
+    briefs = sent.exclude(text=SWITCHED_OFF)
+    if switched_off:
+        briefs = briefs.filter(created_at__gt=switched_off.created_at)
+    recent = list(briefs.order_by("-created_at")[:UNANSWERED_IN_A_ROW])
+    previous = recent[0] if recent else None
     with conversation_turn:
         conversation.refresh_from_db()
         result = ClaudeRunner(model=settings.CLAUDE_REPLY_MODEL).run(
-            prompt(life.today(), delivered.order_by("-created_at").first()), system_prompt=SYSTEM_PROMPT,
+            prompt(life.today(), previous), system_prompt=SYSTEM_PROMPT,
             allowed_tools=ALLOWED_TOOLS, tools=TOOLS, resume=conversation.session_id or None,
             env={"GOLAIET_JOB_RUN_ID": run.pk})
         if result.session_id:
@@ -96,17 +111,28 @@ def run(job, run) -> dict:
     report = outcome(result, "")
     if report["failed"]:
         return report
-    verdict = VERDICT.search(result.text)
-    answered = verdict.group(1) if verdict else "unknown"
-    earlier = JobRun.objects.filter(job=job, status=JobRun.Status.DONE).exclude(pk=run.pk).order_by("-started_at")
-    unanswered = [answered] + [earlier_run.summary.partition(" ")[0].removeprefix("answered=")
-                               for earlier_run in earlier[:UNANSWERED_IN_A_ROW - 1]]
-    text = SWITCHED_OFF if unanswered == ["no"] * UNANSWERED_IN_A_ROW else VERDICT.sub("", result.text).strip()
-    if text == SWITCHED_OFF:
-        job.enabled = False
-        job.save(update_fields=["enabled"])
+    given = [match.group(1) for match in VERDICT.finditer(result.text) if match.group(1)]
+    answered = given[-1].lower() if given else "unknown"
+    verdicts = {}
+    earlier = JobRun.objects.filter(job=job, status=JobRun.Status.DONE).exclude(pk=run.pk).order_by("started_at")
+    for summary in earlier.values_list("summary", flat=True):
+        judged = JUDGED.match(summary)
+        if judged:
+            verdicts[int(judged.group(1))] = judged.group(2)
+    if previous:
+        verdicts[previous.pk] = answered
+    switch_off = len(recent) == UNANSWERED_IN_A_ROW and all(verdicts.get(brief.pk) == "no" for brief in recent)
+    text = SWITCHED_OFF if switch_off else VERDICT.sub("", result.text).strip()
     outgoing = Message.objects.create(conversation=conversation, direction=Message.Direction.OUT, text=text, job_run=run)
     outgoing.telegram_message_id = telegram.send(text, chat_id=conversation.chat_id)
     outgoing.save(update_fields=["telegram_message_id"])
-    sent = "delivered" if outgoing.telegram_message_id else "not delivered"
-    return dict(report, summary=f"answered={answered} {sent}{' and switched off' if text == SWITCHED_OFF else ''} · {text[:400]}")
+    delivered = "delivered" if outgoing.telegram_message_id else "not delivered"
+    if switch_off and not outgoing.telegram_message_id:
+        # Off without a word would look like a brief that simply stopped coming: the job stays on
+        # and the run fails, which is announced like any failed run.
+        return dict(report, failed=True, summary="the switch-off notice did not send; the brief stays on")
+    if switch_off:
+        job.enabled = False
+        job.save(update_fields=["enabled"])
+    return dict(report, summary=f"judged={previous.pk if previous else 'none'} answered={answered} {delivered}"
+                                f"{' and switched off' if switch_off else ''} · {text[:400]}")

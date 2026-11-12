@@ -309,14 +309,29 @@ most three questions. Guy's answers are ordinary messages in a session that
 has seen the questions. The same flow is the seed of the Phase 5 digest
 (ARCHITECTURE §4.5).
 
+The stopping rule: when the last three delivered briefs each went 48 hours
+with no question taken up, the job switches itself off and says so once.
+One verdict per delivered brief: a run records which brief it judged, so a
+Friday whose brief did not go out is not a second "no" for the one before
+it. The switch-off notice is not a brief and is never judged; if it does not
+send, the run fails and the job stays on. The brief is brought back by
+ticking `enabled` on the job `brief` in admin (the notice says so; no tool
+does it), and the count starts again from there: only briefs delivered
+after the switch-off count.
+
 ### 3.7 Import
 
 `manage.py import_life <progress.md> --extras <json>` creates the trackers
 and their first rows. `--dry-run` prints what it would do and what it leaves
-out; `--replace` drops the life trackers and imports again;
-`--events-until <date>` leaves later events out (the replay's starting
-state); `--check` compares `core.life.board()` with the vault's own
-`derive()` on the same file. Each lane's log rows become observations on it
+out; `--replace` drops the life trackers and imports again, and is refused
+once the conversation has written an observation or a lane change on them,
+unless `--force` is given: it says what would be lost;
+`--events-until <date>` leaves out later events and the practices that
+start after the date (the replay's starting state; lanes are not rewound,
+they are imported as they stand); `--check` compares `core.life.board()`
+with the vault's own `derive()` on the same file, both with their lists
+whole and the derived overdue checks set aside. An extras key the import
+does not read is an error. Each lane's log rows become observations on it
 (its history); each practice's event days become observations. Briefs and
 the lanes' `file` come from the extras file, which lives in the vault and
 carries the standing constraints the vault's memory files hold today.
