@@ -113,12 +113,14 @@ def parse_envelope(stdout: str, exit_code: int = 0) -> AgentResult:
 
 def write_mcp_config(env: dict[str, str]) -> Path:
     """One file per run: `env` is how the tool server learns which job run and
-    message it serves (provenance on the rows it writes), and which database.
-    The database is named here, not left to what the CLI hands on of its own
-    environment: a tool server that fell back to `.env` would write to the
-    live database while the process that started it was on another one."""
+    message it serves (provenance on the rows it writes), which database, and
+    which folder is the vault. Both are named here, not left to what the CLI
+    hands on of its own environment: a tool server that fell back to `.env`
+    would write to the live database, or into the vault, while the process
+    that started it was on another database or had the vault switched off."""
     database = settings.DATABASES["default"]
-    env = {"DB_NAME": database["NAME"], "DB_HOST": database["HOST"], "DB_PORT": database["PORT"], **env}
+    env = {"DB_NAME": database["NAME"], "DB_HOST": database["HOST"], "DB_PORT": database["PORT"],
+           "VAULT_DIR": settings.VAULT_DIR, **env}
     settings.AGENT_RUNS_DIR.mkdir(parents=True, exist_ok=True)
     path = settings.AGENT_RUNS_DIR / f"mcp-{uuid.uuid4()}.json"
     manage_py = Path(settings.BASE_DIR) / "manage.py"

@@ -36,10 +36,13 @@ def test_billing_markers():
 
 
 def test_the_tool_server_is_put_on_the_database_of_the_process_that_starts_it(settings, tmp_path, monkeypatch):
-    settings.AGENT_RUNS_DIR = tmp_path
+    settings.AGENT_RUNS_DIR, settings.VAULT_DIR = tmp_path, "/somewhere/else"
     for field, value in (("NAME", "another_database"), ("HOST", "db.example"), ("PORT", 6000)):
         monkeypatch.setitem(settings.DATABASES["default"], field, value)
     path = runner.write_mcp_config({"GOLAIET_JOB_RUN_ID": 7})
     env = json.loads(path.read_text())["mcpServers"]["golaiet"]["env"]
-    assert env == {"DB_NAME": "another_database", "DB_HOST": "db.example", "DB_PORT": "6000", "GOLAIET_JOB_RUN_ID": "7"}
+    assert env == {"DB_NAME": "another_database", "DB_HOST": "db.example", "DB_PORT": "6000", "VAULT_DIR": "/somewhere/else",
+                   "GOLAIET_JOB_RUN_ID": "7"}
+    settings.VAULT_DIR = ""
+    assert json.loads(runner.write_mcp_config({}).read_text())["mcpServers"]["golaiet"]["env"]["VAULT_DIR"] == "", "switched off is handed on as switched off"
     assert "PASSWORD" not in path.read_text().upper()
