@@ -273,7 +273,8 @@ dependency in the image or the dashboard.
   progress, burning and focus change only on his words: file the fact on the
   lane, then record only what changes, citing it. A task is a station.
   Taking a tracker off the board pauses it; it is still recorded. Say what
-  you recorded: tracker, date and the new count or state, in one line. When
+  you recorded: tracker, date and the new count or state, in one line. The
+  day and the gap you name are the ones the tool's result gives. When
   the tracker or the date is unclear, ask before filing. Nothing is edited:
   a wrong practice entry is retracted, a wrong change to a lane is corrected
   by a new change. The conversation is not only reports: questions and
@@ -557,6 +558,13 @@ bear a practice and which are set aside, with no session and no database.
 The conventions field has a migration of its own: a migration that has
 been committed is not edited, which is now a rule in `CLAUDE.md`. The
 command is now about 250 lines.
+
+**After the first replay, 2026-11-14.** Every time in a tool's result is
+given in the stack's time zone and not in UTC, where a day filed by its
+date reads as the evening before. An observation of a practice carries its
+event day, and the result of filing one carries the event day before it
+and the days between the two, worked out from the rows; the life paragraph
+tells the reply to name the day and the gap the result gives.
 
 ### Step 3 — the Life screen and the wall (2–3 evenings)
 

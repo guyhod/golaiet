@@ -89,6 +89,32 @@ def test_a_practice_has_no_jobs_and_is_not_judged(stretch):
         tools.record_assessment("stretch", {"level": "good"}, "It went well.")
 
 
+def test_an_event_filed_by_its_date_comes_back_as_that_day_with_the_gap_between_event_days(stretch):
+    first = tools.record_observation("stretch", "2031-03-04", "", "Stretched.")
+    assert first["day"] == "2031-03-04" and first["observed_at"] == "2031-03-04T00:00:00+02:00", "not the evening before, as UTC has it"
+    assert (first["previous_day"], first["days_between"]) == (None, None)
+    wrong = tools.record_observation("stretch", "2031-03-06", "", "Stretched, I think.")
+    tools.record_observation("stretch", "2031-03-06", "", "No, I did not.", {"retracts": wrong["id"]})
+    late = tools.record_observation("stretch", "2031-03-08T22:30:00+00:00", "", "Stretched after midnight.")
+    assert (late["day"], late["previous_day"], late["days_between"]) == ("2031-03-09", "2031-03-04", 5), "a retracted day is no event"
+    again = tools.record_observation("stretch", "2031-03-09", "", "As I said.")
+    assert (again["previous_day"], again["days_between"]) == ("2031-03-04", 5), "from the rows: the same day reported twice has the same gap"
+    described = tools.get_tracker("stretch")
+    assert described["latest_observation_at"].endswith("+02:00")
+    listed = tools.search_observations("Stretched", "stretch")
+    assert [found["day"] for found in listed] == ["2031-03-09", "2031-03-06", "2031-03-04"] and "previous_day" not in listed[0]
+    assert "day" not in tools.search_observations("did not", "stretch")[0], "a retraction is not an event and has no event day"
+
+
+def test_an_assessment_comes_back_in_the_stacks_time_zone(db):
+    tools.create_tracker("garden", "Garden", "campaign", {"short": "Garden"}, "Bed by bed.")
+    said = tools.record_observation("garden", "2031-03-11", "", "The beds are dug.")
+    assert "day" not in said and "previous_day" not in said, "only a practice has event days"
+    judged = tools.record_assessment("garden", {"stations": [{"id": "dig", "label": "Dig the beds", "track": "Beds", "state": "current"}]},
+                                     "He said so.", [said["id"]])
+    assert datetime.datetime.fromisoformat(judged["at"]).utcoffset() > datetime.timedelta(0), "Jerusalem is never on UTC"
+
+
 def test_the_event_day_is_the_jerusalem_day_not_the_utc_one(stretch):
     """A bare date is Jerusalem midnight, which is still the evening before in
     UTC; a report late in the UTC evening is already tomorrow in Jerusalem."""

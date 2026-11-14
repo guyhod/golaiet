@@ -17,6 +17,7 @@ from django.utils import timezone
 
 from chat.models import Message
 from core import kinds, life
+from core.kinds import practice
 from core.models import Alert, Assessment, Focus, Observation, Tracker
 from scheduler.models import Job
 
@@ -31,6 +32,12 @@ def _message_id() -> int | None:
     return int(value) if value else None
 
 
+def _local(moment: datetime) -> str:
+    """A stored time as the tools hand it back: in the stack's time zone. A day filed by its date is
+    midnight there, which is the evening before in UTC, and a model reads the day off the string."""
+    return timezone.localtime(moment).isoformat()
+
+
 def _tracker_dict(tracker: Tracker) -> dict:
     latest = tracker.observations.order_by("-observed_at").first()
     judged = tracker.assessments.order_by("-at").first()
@@ -38,7 +45,7 @@ def _tracker_dict(tracker: Tracker) -> dict:
         "slug": tracker.slug, "title": tracker.title, "kind": tracker.kind, "status": tracker.status,
         "subject": tracker.subject, "cadence": cadence_of(tracker),
         "observations": tracker.observations.count(),
-        "latest_observation_at": latest.observed_at.isoformat() if latest else None,
+        "latest_observation_at": _local(latest.observed_at) if latest else None,
         "latest_assessment": _assessment_dict(judged) if judged else None,
     }
     if tracker.kind in kinds.LIFE:
@@ -56,7 +63,7 @@ def _agent_subject(kind_module, subject: dict, stored: dict) -> None:
 
 def _assessment_dict(assessment: Assessment) -> dict:
     return {
-        "id": assessment.pk, "tracker": assessment.tracker.slug, "at": assessment.at.isoformat(),
+        "id": assessment.pk, "tracker": assessment.tracker.slug, "at": _local(assessment.at),
         "state": assessment.state, "reason": assessment.reason,
         "evidence_ids": list(assessment.evidence.values_list("pk", flat=True)),
     }
@@ -64,20 +71,33 @@ def _assessment_dict(assessment: Assessment) -> dict:
 
 def _alert_dict(alert: Alert) -> dict:
     return {"id": alert.pk, "tracker": alert.tracker.slug, "level": alert.level, "text": alert.text,
-            "created_at": alert.created_at.isoformat()}
+            "created_at": _local(alert.created_at)}
 
 
 def _focus_dict(focus: Focus) -> dict:
     return {"tracker": focus.tracker.slug if focus.tracker else None, "view": focus.view,
-            "view_params": focus.view_params, "note": focus.note, "set_at": focus.set_at.isoformat()}
+            "view_params": focus.view_params, "note": focus.note, "set_at": _local(focus.set_at)}
 
 
 def _observation_dict(observation: Observation) -> dict:
-    return {
+    described = {
         "id": observation.pk, "tracker": observation.tracker.slug,
-        "observed_at": observation.observed_at.isoformat(), "source_url": observation.source_url,
+        "observed_at": _local(observation.observed_at), "source_url": observation.source_url,
         "summary": observation.summary, "payload": observation.payload,
     }
+    if observation.tracker.kind == "practice" and "retracts" not in observation.payload:
+        described["day"] = timezone.localdate(observation.observed_at).isoformat()
+    return described
+
+
+def _gap(observation: Observation) -> dict:
+    """The event day before this practice event and the days between the two, from the rows and
+    not from the clock: they hold for a report filed late, and the reply names them as given."""
+    day = timezone.localdate(observation.observed_at)
+    earlier = [event for event in practice.event_days(observation.tracker.observations.all()) if event < day]
+    previous = max(earlier, default=None)
+    return {"previous_day": previous.isoformat() if previous else None,
+            "days_between": (day - previous).days if previous else None}
 
 
 def _cadence_jobs(tracker: Tracker):
@@ -241,7 +261,8 @@ def record_observation(slug: str, observed_at: str, source_url: str, summary: st
     summary: one or two sentences in your words with the figure if there is one; on a practice or a campaign,
     Guy's own words. payload: only the fields the tracker kind allows (campaign: {"station": id} when the fact
     is about one station; practice: {"retracts": id} to take back a wrong observation).
-    A source_url already filed for this tracker is not filed again."""
+    A source_url already filed for this tracker is not filed again. For a practice the result carries day (the
+    event day), previous_day (the event day before it) and days_between."""
     tracker = Tracker.objects.get(slug=slug)
     kind_module = kinds.get(tracker.kind)
     payload = kind_module.validate_payload(payload or {})
@@ -255,7 +276,8 @@ def record_observation(slug: str, observed_at: str, source_url: str, summary: st
     observation = Observation.objects.create(
         tracker=tracker, observed_at=_parse_when(observed_at, "observed_at"), source_url=source_url,
         summary=summary.strip(), payload=payload, job_run_id=_run_id())
-    return dict(_observation_dict(observation), duplicate=False)
+    gap = _gap(observation) if tracker.kind == "practice" and "retracts" not in payload else {}
+    return dict(_observation_dict(observation), duplicate=False, **gap)
 
 
 def search_observations(query: str, slug: str | None = None, since: str | None = None, limit: int = 20) -> list[dict]:
