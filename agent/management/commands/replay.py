@@ -39,7 +39,8 @@ no database.
 
 Nothing a replayed session does may leave the scratch database: Telegram's
 token and the vault's folder are emptied before the first run, so nothing
-is sent and no note is written.
+is sent and no note is written, and a replayed session has the tool
+server's tools and no web tool.
 
 The CLI keeps a transcript of every session in its state folder. The replay
 gives it a temporary one and removes it at the end, so nothing of the
@@ -58,6 +59,8 @@ from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 
 from chat.models import Conversation, Message
+from agent.flows import reply as reply_flow
+from agent.runner import MCP_SERVER_NAME
 from core.kinds import practice
 from core.models import Observation, Tracker
 from scheduler.dispatcher import execute_job
@@ -180,6 +183,9 @@ class Command(BaseCommand):
         # Some of the messages ask for a note, and a note is written under the vault's folder: with
         # none, the tool says the vault cannot be reached and nothing is written.
         settings.VAULT_DIR = os.environ["VAULT_DIR"] = ""
+        # No web tools either: the messages are private and the comparison needs none, so a replayed
+        # session has the tool server's tools and no built-in one.
+        reply_flow.ALLOWED_TOOLS, reply_flow.TOOLS = [f"mcp__{MCP_SERVER_NAME}__*"], []
         call_command("seed_jobs", verbosity=0)
         state = tempfile.mkdtemp(prefix="golaiet-replay-")
         settings.CLAUDE_CONFIG_DIR = state
@@ -232,10 +238,12 @@ class Command(BaseCommand):
             elif created and not case.may_create:
                 problems.append(f"it created a practice ({', '.join(tracker.slug for tracker in created)}), which was not expected")
             after = event_days(stands_for)
-            # A practice created with a start in the past was told of that day: the start is the report.
-            # A start on the day the message was sent is only the default, and proves nothing.
+            # A red practice created with a start in the past was told of that day: the start is the
+            # report. A start on the day the message was sent is only the default, and proves nothing.
+            # On a green practice a start is the beginning of a streak, not the report of an event.
             told = {(case.bears, tracker.subject["started"]) for tracker in created
-                    if tracker.slug in stands_for and tracker.subject["started"] < case.sent_at.date().isoformat()}
+                    if tracker.slug in stands_for and tracker.subject["color"] == "red"
+                    and tracker.subject["started"] < case.sent_at.date().isoformat()}
             for slug, fair in case.events:
                 if not any((slug, day) in after | told for day in fair):
                     problems.append(f"wanted {slug} on {' or '.join(sorted(fair))}; its days are now "

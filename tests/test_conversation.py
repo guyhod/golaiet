@@ -14,7 +14,7 @@ from django.core.management.base import CommandError
 
 from agent import flows, tools
 from agent.flows import brief, reply
-from agent.runner import AgentResult
+from agent.runner import AgentResult, build_cmd
 from chat import poller, telegram
 from chat.models import Conversation, Message
 from core.models import Observation, Tracker
@@ -261,12 +261,17 @@ def replayed(db, tmp_path, monkeypatch, settings):
     monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "a-token")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123:token")
     monkeypatch.setenv("VAULT_DIR", str(tmp_path))
+    monkeypatch.setattr(reply, "TOOLS", reply.TOOLS)   # the replay narrows both for its own run; put back afterwards
+    monkeypatch.setattr(reply, "ALLOWED_TOOLS", reply.ALLOWED_TOOLS)
     tools.create_tracker("stretch", "Stretching", "practice", {"color": "red", "started": "2031-03-01"}, "Ten minutes count.")
     Conversation.objects.create(chat_id="6307", conventions="- Distances are given in kilometres.")
     script, states = dict(SCRIPT), []
 
     def session(self, prompt, *, env, **kwargs):
         states.append(settings.CLAUDE_CONFIG_DIR)
+        assert (kwargs["tools"], kwargs["allowed_tools"]) == ([], ["mcp__golaiet__*"]), "the tool server's tools and nothing else"
+        command = build_cmd(prompt, claude_bin="claude", model="any", tools=kwargs["tools"], allowed_tools=kwargs["allowed_tools"])
+        assert command[command.index("--tools") + 1] == "", "the CLI is given no built-in tool, so nothing of a message goes to the web"
         assert os.environ["TELEGRAM_BOT_TOKEN"] == "", "what the CLI and its tool server inherit sends nothing either"
         assert os.environ["VAULT_DIR"] == settings.VAULT_DIR == "", "and no note can be written: the vault's folder is switched off"
         if Conversation.objects.filter(chat_id="6307").exclude(conventions="").exists():
@@ -282,8 +287,9 @@ def replayed(db, tmp_path, monkeypatch, settings):
                 wrong = Observation.objects.get(tracker__slug=slug, observed_at=tools._parse_when(day, "day"))
                 Observation.objects.create(tracker=wrong.tracker, summary="Not so", observed_at=wrong.observed_at,
                                            payload={"retracts": wrong.pk}, job_run_id=env["GOLAIET_JOB_RUN_ID"])
-            elif action == "create":
-                tools.create_tracker(slug, slug.title(), "practice", {"color": "red", "started": day}, "Any one counts.")
+            elif action in ("create", "create green"):
+                tools.create_tracker(slug, slug.title(), "practice", {"color": action.rpartition(" ")[2].replace("create", "red"), "started": day},
+                                     "Any one counts.")
             elif Tracker.objects.filter(slug=slug).exists():
                 Observation.objects.create(tracker=Tracker.objects.get(slug=slug), summary="As he said",
                                            observed_at=tools._parse_when(day, "day"), job_run_id=env["GOLAIET_JOB_RUN_ID"])
@@ -334,6 +340,7 @@ def test_a_day_that_is_missing_and_a_day_nobody_expected_are_both_misses(replaye
 
 @pytest.mark.parametrize("expected_day, does, verdict", [
     ("2031-03-08", [("create", "swimming-laps", "2031-03-08")], "ok"),     # a start in the past is the report itself
+    ("2031-03-08", [("create green", "swimming-laps", "2031-03-08")], "MISS"),   # on a green practice it begins a streak, and reports nothing
     ("2031-03-09", [("create", "swimming-laps", "2031-03-09")], "MISS"),   # a start on the sending day is only the default
 ])
 def test_a_start_counts_as_the_report_only_when_it_is_before_the_day_of_the_message(replayed, capsys, expected_day, does, verdict):
