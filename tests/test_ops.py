@@ -5,7 +5,6 @@ import http.server
 import json
 import os
 import subprocess
-import sys
 import threading
 from pathlib import Path
 
@@ -44,7 +43,6 @@ def heartbeat(minutes_ago: int) -> dict:
     return {"status": "ok", "last_heartbeat": at.strftime("%Y-%m-%dT%H:%M:%S.000Z")}
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="the watcher reads the time with the Mac's own date")
 def test_the_watcher_logs_every_run_and_notifies_only_when_something_is_wrong(health, tmp_path):
     answer, url = health
     notifier = tmp_path / "notify.sh"

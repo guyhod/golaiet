@@ -400,6 +400,13 @@ prunes and clears a half dump left by a killed run; each script has a test;
 the install and removal steps are in the README. Nothing is installed; the
 exit check is open and is Guy's.
 
+**Second review, 2026-11-14.** The watcher reads the heartbeat's time with
+the Mac's `date` or GNU `date`, so its test runs wherever the checks run.
+The README's steps now give the order (the first dump, then `make stack`,
+then the reboot), a first dump by hand, where `docker` must be on the
+plists' PATH, how to see a notification without the wait, and the restore
+with the scratch database made first and the row counts that are compared.
+
 ### Step 1 — kinds, import, the board API (2 evenings)
 
 §3.1, §3.2, §3.7 and `GET /api/life`. A spike of the pure functions already
@@ -502,6 +509,9 @@ the import. This is not the step's line.
 (keyed on the focus row's `set_at`, remembered by the browser), and a lane
 the map does not draw opens in full from Burning, the horizon, Next and the
 trail. `make e2e`: 7 of 7. The exit check is still open.
+
+**Second review, 2026-11-14.** A lane the map does not draw is read once
+for both its stations and its history.
 
 ### Step 4 — Friday in Telegram (½–1 evening)
 

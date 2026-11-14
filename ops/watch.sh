@@ -36,8 +36,10 @@ if [ -z "$heartbeat" ]; then
     exit 0
 fi
 
-# 2026-11-09T05:33:36.837Z → epoch seconds (BSD date; the fraction is dropped).
-heartbeat_epoch="$(date -j -u -f "%Y-%m-%dT%H:%M:%S" "${heartbeat%%.*}" +%s 2>/dev/null)"
+# 2026-11-09T05:33:36.837Z → epoch seconds; the fraction is dropped. The Mac's date reads it with
+# -j -f; the second form is GNU date, so the script's test also runs where the checks run on Linux.
+stamp="${heartbeat%%.*}"
+heartbeat_epoch="$(date -j -u -f "%Y-%m-%dT%H:%M:%S" "${stamp%Z}" +%s 2>/dev/null || date -u -d "${stamp%Z}Z" +%s 2>/dev/null)"
 if [ -z "$heartbeat_epoch" ]; then
     echo "$now unreadable heartbeat=$heartbeat" >> "$LOG_DIR/watch.log"
     notify "The health endpoint returned a heartbeat time that could not be read"

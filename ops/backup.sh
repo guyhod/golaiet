@@ -3,7 +3,7 @@
 # (ops/com.golaiet.backup.plist): pg_dump through the db container into a
 # folder outside the repo, 30 days kept. The dump is written beside its
 # final name and moved, so a dump that failed halfway never looks whole.
-# Restore: docker exec -i golaiet-db pg_restore -U <user> -d <scratch db> < file
+# Restoring one is in the README.
 set -eu
 
 BACKUP_DIR="${BACKUP_DIR:-$HOME/Backups/golaiet}"

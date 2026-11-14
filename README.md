@@ -62,21 +62,60 @@ docker exec golaiet-db sh -c 'dropdb -U "$POSTGRES_USER" golaiet_scratch'
 ```
 
 **The watcher and the nightly dump** run outside the stack, under launchd.
-Nothing in this repo installs them:
+Nothing in this repo installs them. Before installing, `command -v docker`
+must print a folder the plists' `PATH` lists (`/usr/local/bin`,
+`/opt/homebrew/bin`, `/usr/bin`, `/bin`). A per-user install of Docker
+Desktop puts it in `~/.docker/bin`: add that folder, by its full path, to
+the `PATH` string in `ops/com.golaiet.backup.plist` first, or every dump
+fails. The plists also name this folder by its full path; edit them if the
+repo moves.
 
 ```bash
-chmod +x ops/watch.sh ops/backup.sh
 mkdir -p logs ~/Backups/golaiet
 cp ops/com.golaiet.watch.plist ops/com.golaiet.backup.plist ~/Library/LaunchAgents/
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.golaiet.watch.plist
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.golaiet.backup.plist
-launchctl kickstart gui/$(id -u)/com.golaiet.watch     # one run now; a line appears in logs/watch.log
+launchctl kickstart gui/$(id -u)/com.golaiet.watch     # one run now: a line appears in logs/watch.log
+launchctl kickstart gui/$(id -u)/com.golaiet.backup    # one dump now: a file in ~/Backups/golaiet, an `ok` line in logs/backup.log
 ```
 
-The plists name this folder by its full path; edit them if the repo moves.
-A dump restores with
-`docker exec -i golaiet-db pg_restore -U <user> -d <database> < ~/Backups/golaiet/golaiet-<day>.dump`.
-To remove them:
+`bootstrap` fails on an agent that is already loaded. After editing a plist,
+copy it again, `bootout` the agent (below) and `bootstrap` it again.
+
+The order the first time: install and take the first dump as above, which
+is also the dump taken before the stack changes; then `make stack` and
+`seed_jobs`; then the reboot that shows the stack comes back by itself.
+
+**Seeing a notification.** The watcher speaks through `osascript`, which
+macOS lists as Script Editor under System Settings › Notifications. The
+first one may ask to be allowed, and a Focus hides it. To see one without
+waiting for a stale heartbeat, point one run at an address nothing answers
+on (it adds an `unreachable` line to `logs/watch.log`):
+
+```bash
+HEALTH_URL=http://127.0.0.1:9/ ops/watch.sh
+```
+
+With the scheduler stopped (`docker compose stop scheduler`), the hourly run
+notifies once the last heartbeat is 90 minutes old; `MAX_AGE_MINUTES=1
+ops/watch.sh` a few minutes after stopping shows the same notification
+without the wait. Start it again with `docker compose start scheduler`.
+
+**Restoring a dump**, into a database of its own beside the live one, and
+comparing the row counts of the five tables that hold what cannot be
+rebuilt. The restored counts are the live ones as of the dump: the live
+side is ahead only by the observations, messages and job runs written since.
+
+```bash
+counts="select 'core_tracker', count(*) from core_tracker union all select 'core_observation', count(*) from core_observation union all select 'core_assessment', count(*) from core_assessment union all select 'chat_message', count(*) from chat_message union all select 'scheduler_jobrun', count(*) from scheduler_jobrun"
+docker exec golaiet-db sh -c 'createdb -U "$POSTGRES_USER" golaiet_restore'
+docker exec -i golaiet-db sh -c 'pg_restore -U "$POSTGRES_USER" -d golaiet_restore' < ~/Backups/golaiet/golaiet-<day>.dump
+docker exec golaiet-db sh -c 'psql -U "$POSTGRES_USER" -d golaiet_restore -Atc "$0"' "$counts"
+docker exec golaiet-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "$0"' "$counts"
+docker exec golaiet-db sh -c 'dropdb -U "$POSTGRES_USER" golaiet_restore'
+```
+
+To remove the two agents:
 
 ```bash
 launchctl bootout gui/$(id -u)/com.golaiet.watch
