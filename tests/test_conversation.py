@@ -229,7 +229,7 @@ def event(tracker, date, **more):
 CASES = {"cases": [
     {"id": "c1", "sent": {"date": "2031-03-08", "time": "07:30"}, "text": "Stretched last night", "expected": [event("stretch", "2031-03-07")]},
     {"id": "c2", "sent": {"date": "2031-03-09", "assumed_time": "09:00"}, "text": "What is the weather like?",
-     "expected": [{"tracker": "garden", "effect": "answer_only"}]},
+     "expected": [{"tracker": None, "effect": "answer_only"}, {"tracker": "garden", "effect": "note", "file": "garden.md"}]},
     {"id": "c3", "sent": {"date": "2031-03-09", "time": "21:00"}, "text": "Count my swims from now on; I swam today",
      "expected": [{"tracker": "swim", "effect": "new_tracker"}, event("swim", "2031-03-09")]},
     {"id": "c4", "sent": {"date": "2031-03-11", "time": "08:00"}, "text": "Swam yesterday", "expected": [event("swim", "2031-03-10")]},
@@ -257,8 +257,10 @@ SCRIPT = {
 def replayed(db, tmp_path, monkeypatch, settings):
     """The replay with the CLI replaced by a script of what the session files for each message."""
     settings.TELEGRAM_BOT_TOKEN, settings.TELEGRAM_CHAT_ID, settings.CLAUDE_CONFIG_DIR = "123:token", "6307", str(tmp_path / "state")
+    settings.VAULT_DIR = str(tmp_path)
     monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "a-token")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123:token")
+    monkeypatch.setenv("VAULT_DIR", str(tmp_path))
     tools.create_tracker("stretch", "Stretching", "practice", {"color": "red", "started": "2031-03-01"}, "Ten minutes count.")
     Conversation.objects.create(chat_id="6307", conventions="- Distances are given in kilometres.")
     script, states = dict(SCRIPT), []
@@ -266,10 +268,21 @@ def replayed(db, tmp_path, monkeypatch, settings):
     def session(self, prompt, *, env, **kwargs):
         states.append(settings.CLAUDE_CONFIG_DIR)
         assert os.environ["TELEGRAM_BOT_TOKEN"] == "", "what the CLI and its tool server inherit sends nothing either"
-        assert "conventions for every report:\n- Distances are given in kilometres" in prompt, "each case reads Guy's conventions"
+        assert os.environ["VAULT_DIR"] == settings.VAULT_DIR == "", "and no note can be written: the vault's folder is switched off"
+        if Conversation.objects.filter(chat_id="6307").exclude(conventions="").exists():
+            assert "conventions for every report:\n- Distances are given in kilometres" in prompt, "each case reads Guy's conventions"
         monkeypatch.setenv("GOLAIET_MESSAGE_ID", str(env["GOLAIET_MESSAGE_ID"]))
         for action, slug, day in script.get(prompt.rpartition("\n")[2], []):
-            if action == "create":
+            if action == "limit":
+                return AgentResult(text="Claude usage limit reached. It resets at 9pm.", is_error=True, exit_code=1)
+            if action == "note":
+                with pytest.raises(ValueError, match="VAULT_DIR is not set"):
+                    tools.add_note(slug, day)
+            elif action == "retract":
+                wrong = Observation.objects.get(tracker__slug=slug, observed_at=tools._parse_when(day, "day"))
+                Observation.objects.create(tracker=wrong.tracker, summary="Not so", observed_at=wrong.observed_at,
+                                           payload={"retracts": wrong.pk}, job_run_id=env["GOLAIET_JOB_RUN_ID"])
+            elif action == "create":
                 tools.create_tracker(slug, slug.title(), "practice", {"color": "red", "started": day}, "Any one counts.")
             elif Tracker.objects.filter(slug=slug).exists():
                 Observation.objects.create(tracker=Tracker.objects.get(slug=slug), summary="As he said",
@@ -283,10 +296,10 @@ def replayed(db, tmp_path, monkeypatch, settings):
     return cases, script, states
 
 
-def replay(cases, capsys, *more, misses=0):
-    """The replay's lines by case id; fails unless exactly `misses` cases missed."""
-    if misses:
-        with pytest.raises(CommandError, match=f"^{misses} case"):
+def replay(cases, capsys, *more, misses=0, stopped=""):
+    """The replay's lines by case id; fails unless exactly `misses` cases missed, or it stopped in the words given."""
+    if misses or stopped:
+        with pytest.raises(CommandError, match=stopped or f"^{misses} case"):
             call_command("replay", str(cases), *more)
     else:
         call_command("replay", str(cases), *more)
@@ -353,7 +366,7 @@ def test_a_case_that_only_bears_a_practice_passes_when_it_creates_one_and_adds_n
 
 def test_only_runs_one_case_and_names_the_case_that_must_come_first(replayed, capsys):
     cases, _, _ = replayed
-    with pytest.raises(CommandError, match="--only c4: it reports on a practice that c3 creates"):
+    with pytest.raises(CommandError, match="--only c4: it reports on a practice that c3 creates; run without --only"):
         call_command("replay", str(cases), "--only", "c4")
     with pytest.raises(CommandError, match="--only c2: no case of that id"):
         call_command("replay", str(cases), "--only", "c2")
@@ -378,17 +391,67 @@ def test_the_replay_checks_every_case_before_it_spends_a_session(replayed, monke
         call_command("replay", str(cases))
     shapeless = {"cases": [{"id": "d1", "sent": {"date": "2031-03-08", "time": "07:30"}, "text": "Stretched", "expected": [
         {"tracker": "stretch", "effect": "event"}, {"effect": "event", "date": "2031-03-08"}, {"tracker": "stretch"}]},
-        {"sent": {"date": "2031-03-08"}, "text": "No id", "expected": []}, {"id": "d3", "text": "No time at all", "expected": []}]}
+        {"sent": {"date": "2031-03-08"}, "text": "No id", "expected": []}, {"id": "d3", "text": "No time at all", "expected": []},
+        {"id": "d4", "sent": {"date": "2031-03-08", "time": "07:30"}, "text": "Stretched", "expected": [event("stretch", "2031-03-07", **{"or": "2031-03-08"})]},
+        {"id": "d5", "sent": {"date": "2031-03-08", "time": "07:30"}, "text": "Count it", "expected": [{"effect": "new_tracker"}]}]}
     cases.write_text(json.dumps(shapeless))
     with pytest.raises(CommandError) as refused:
         call_command("replay", str(cases))
     for words in ("d1: an expected effect has no date", "d1: an expected effect has no tracker", "d1: an expected effect has no effect",
-                  "d3: a case needs `sent`"):
+                  "d3: a case needs `sent`", "case 2: it has no id", "d4: `or` must be a list of days, got '2031-03-08'",
+                  "d5: an expected effect has no tracker"):
         assert words in str(refused.value)
     assert not Message.objects.exists()
     monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN")
     with pytest.raises(CommandError, match="CLAUDE_CODE_OAUTH_TOKEN"):
         call_command("replay", str(cases))
+
+
+def test_a_day_the_run_removed_and_a_practice_nobody_asked_for_are_misses(replayed, capsys):
+    cases, script, _ = replayed
+    script["As I said, I did stretch on the 7th"] = [("retract", "stretch", "2031-03-07")]
+    script["Stretched around midnight"] = [("file", "stretch", "2031-03-12"), ("create", "midnights", "2031-03-12")]
+    verdicts, printed = replay(cases, capsys, misses=2)
+    assert (verdicts["c5"], verdicts["c6"]) == ("MISS", "MISS")
+    assert "removed stretch on 2031-03-07, which was there before the run" in printed
+    assert "it created a practice (midnights), which was not expected" in printed
+
+
+def test_the_replay_stops_at_the_plans_limit_and_counts_neither_that_case_nor_the_rest(replayed, capsys):
+    cases, script, _ = replayed
+    script["Stretched last night"] = []
+    script["Swam yesterday"] = [("limit", "", "")]
+    verdicts, printed = replay(cases, capsys, stopped="stopped at the plan's usage limit on c4, which is not counted; the last case judged was c3; "
+                                                      "not run: c5, c6, c7, c8. Before it: 1 case\\(s\\) did not file what was expected")
+    assert verdicts == {"c1": "MISS", "c3": "ok"}, printed
+    assert not Conversation.objects.filter(chat_id="replay-c5").exists()
+
+
+def test_a_replay_without_conventions_says_so_before_the_first_case(replayed, capsys):
+    cases, script, _ = replayed
+    Conversation.objects.update(conventions="")
+    verdicts, printed = replay(cases, capsys, "--only", "c1")
+    assert printed.index("the conversation's row has no conventions") < printed.index("ok   c1")
+
+
+def test_a_replayed_message_that_asks_for_a_note_cannot_write_one(replayed, capsys, tmp_path):
+    cases, script, _ = replayed
+    (tmp_path / "garden.md").write_text("as it was")
+    Tracker.objects.create(slug="garden", title="Garden", kind="campaign", view="campaign_map", brief="Bed by bed.",
+                           subject={"file": "garden.md", "short": "Beds"})
+    script["Stretched last night"] = [("note", "garden", "a line for the vault"), ("file", "stretch", "2031-03-07")]
+    verdicts, _ = replay(cases, capsys, "--only", "c1")
+    assert verdicts == {"c1": "ok"} and (tmp_path / "garden.md").read_text() == "as it was"
+
+
+def test_list_prints_what_would_be_run_with_no_session_and_no_database(tmp_path, capsys, monkeypatch):
+    """No `db` fixture: a query would fail the test."""
+    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
+    cases = tmp_path / "cases.json"
+    cases.write_text(json.dumps(CASES))
+    call_command("replay", str(cases), "--list")
+    assert capsys.readouterr().out.splitlines() == [
+        "run and compared (6): c1, c3, c4, c5, c6, c8", "run only to bear a practice (1): c7", "set aside, to be read by hand (1): c2"]
 
 
 # ---------------- the Friday brief ----------------

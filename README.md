@@ -49,7 +49,10 @@ the two would resume the conversation's session at once.
 runs real sessions on a database of its own, made beside the live one and
 dropped afterwards. It refuses a database that holds a conversation, keeps
 the CLI's transcripts in a temporary folder it removes, and needs
-`CLAUDE_CODE_OAUTH_TOKEN` in `.env`:
+`CLAUDE_CODE_OAUTH_TOKEN` in `.env`. It empties the Telegram token and
+`VAULT_DIR` for its own run, so nothing is sent and no note is written.
+`replay <cases.json> --list` prints which cases would be run, without a
+session or a database:
 
 ```bash
 docker exec golaiet-db sh -c 'createdb -U "$POSTGRES_USER" golaiet_scratch'

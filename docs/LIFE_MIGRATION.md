@@ -121,7 +121,8 @@ Phase 4 adds two kind modules and no table.
 | Outside the stack | `ops/watch.sh`, `ops/backup.sh`, two launchd entries | 60 |
 | Tests | pytest, Vitest, one Playwright scenario | 600 Python, 250 TypeScript |
 
-Two migrations (the kind choices; `Message.sent_at`). No new table, no new
+Three migrations (the kind choices; `Message.sent_at`;
+`Conversation.conventions`). No new table, no new
 dependency in the image or the dashboard.
 
 ### 3.1 `practice`: events in, arithmetic out
@@ -535,6 +536,27 @@ miss, and `--only` on such a case is refused with the id of the case to
 run first; a case with no date, tracker or effect is refused by name. The
 command is now about 210 lines. The board's sort treats a rank that is
 not a number as missing.
+
+**Fourth review, 2026-11-14.** The replay asks an expected `event` for its
+tracker and its date, a `new_tracker` for its tracker, and nothing of the
+other effects, so an answer that should file nothing may name no tracker; a
+case with no id, and an `or` that is not a list of days, are refused in
+words. A replay cannot write into the vault: every run's tool-server config
+carries the vault's folder from the settings of the process that started
+it, as it carries the database, and the replay empties that folder's
+setting with the Telegram token before the first run. The comparison runs
+in both directions: a day that was there before the run and is gone after
+it is a miss, and no effect in the cases expects a removal; a practice
+created by a case that expects no new tracker is a miss, said in words. A
+run that ends on the plan's usage limit stops the replay: that case and the
+ones after it are named and not counted. The refusal of `--only` says to
+run without it, since a second replay on the same database is refused. A
+replay whose conversation row has no conventions says so before the first
+case. `replay <cases> --list` prints which cases would be run, which only
+bear a practice and which are set aside, with no session and no database.
+The conventions field has a migration of its own: a migration that has
+been committed is not edited, which is now a rule in `CLAUDE.md`. The
+command is now about 250 lines.
 
 ### Step 3 — the Life screen and the wall (2–3 evenings)
 
