@@ -210,8 +210,8 @@ def test_a_note_is_refused_when_it_has_nowhere_safe_to_go(garden, settings, tmp_
         with pytest.raises(ValueError, match=message):
             tools.add_note(slug, "" if slug == "garden" else "a note")
     settings.VAULT_DIR = ""
-    with pytest.raises(ValueError, match="not reachable"):
-        tools.add_note("garden", "a note")
+    with pytest.raises(ValueError, match="^notes to the vault are switched off, and this note was not written$"):
+        tools.add_note("garden", "a note")   # no setting is named: Guy switched it off, and the reply should not tell him to set one
     assert garden.read_bytes() == before and (tmp_path.parent / "outside.md").read_text() == "not in the vault"
     assert (tmp_path / "list.txt").read_text() == "a list, not a note file"
 
@@ -281,7 +281,7 @@ def replayed(db, tmp_path, monkeypatch, settings):
             if action == "limit":
                 return AgentResult(text="Claude usage limit reached. It resets at 9pm.", is_error=True, exit_code=1)
             if action == "note":
-                with pytest.raises(ValueError, match="VAULT_DIR is not set"):
+                with pytest.raises(ValueError, match="switched off"):
                     tools.add_note(slug, day)
             elif action == "retract":
                 wrong = Observation.objects.get(tracker__slug=slug, observed_at=tools._parse_when(day, "day"))

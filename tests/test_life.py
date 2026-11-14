@@ -83,6 +83,12 @@ def stretch(db):
     return tools.create_tracker("stretch", "Stretching", "practice", red(alert_after=3), "Any ten minutes count.", "weekly")
 
 
+def test_the_tool_says_when_each_colour_is_the_one_to_choose():
+    """The description is all the model has to choose by; the mechanics alone left it guessing."""
+    described = " ".join(tools.create_tracker.__doc__.split())
+    assert '"green" for days without something he wants to avoid' in described and '"red" for something he wants to happen' in described
+
+
 def test_a_practice_has_no_jobs_and_is_not_judged(stretch):
     assert stretch["jobs"] == [] and Tracker.objects.get(slug="stretch").view == "campaign_map"
     with pytest.raises(ValueError, match="not judged"):

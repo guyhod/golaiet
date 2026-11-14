@@ -185,8 +185,10 @@ def create_tracker(slug: str, title: str, kind: str, subject: dict, brief: str, 
     stock (a listed company against a buy price), practice (a habit of Guy's, counted from his reports) or
     campaign (a lane of stations on his life map). subject: the kind's fields (topic: {"query": ..., "regions": [...]};
     country_risk: {"iso3": "ISR"}, with "desk": ["security", "political_stability"] for a daily news desk on those
-    lenses; stock: {"ticker": "CEG", "good_below": 170}; practice: {"color": "green" for a streak that an event
-    breaks or "red" for a gap that an event closes, "started": "YYYY-MM-DD", "alert_after": days, red only};
+    lenses; stock: {"ticker": "CEG", "good_below": 170}; practice: {"color": "green" for days without something he
+    wants to avoid (a streak that an event breaks; a long streak is good) or "red" for something he wants to happen
+    (a gap that an event closes; a long gap is what the alert is for), "started": "YYYY-MM-DD", "alert_after": days,
+    red only};
     campaign: {"short": a short name for the map}, all optional).
     brief: standing instructions in full sentences (for a stock: the thesis; for a practice: what counts as an
     event and how it is dated).
@@ -385,7 +387,7 @@ def add_note(slug: str, text: str) -> dict:
     if not text.strip():
         raise ValueError("text must not be empty")
     if not settings.VAULT_DIR:
-        raise ValueError("the vault is not reachable from here (VAULT_DIR is not set)")
+        raise ValueError("notes to the vault are switched off, and this note was not written")
     if not tracker.subject.get("file"):
         raise ValueError(f"{slug} names no vault file (subject.file); ask Guy which file its notes go to")
     vault = Path(settings.VAULT_DIR).resolve()

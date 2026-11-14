@@ -181,7 +181,7 @@ class Command(BaseCommand):
         # server is another process that reads `.env` for whatever the environment it is given lacks.
         settings.TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"] = ""
         # Some of the messages ask for a note, and a note is written under the vault's folder: with
-        # none, the tool says the vault cannot be reached and nothing is written.
+        # none, the tool says that notes are switched off and nothing is written.
         settings.VAULT_DIR = os.environ["VAULT_DIR"] = ""
         # No web tools either: the messages are private and the comparison needs none, so a replayed
         # session has the tool server's tools and no built-in one.
