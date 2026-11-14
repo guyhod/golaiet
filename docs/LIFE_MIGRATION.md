@@ -315,6 +315,10 @@ has seen the questions. The same flow is the seed of the Phase 5 digest
 
 The stopping rule: when the last three delivered briefs each went 48 hours
 with no question taken up, the job switches itself off and says so once.
+Whether a question was taken up is judged by the session, from the rows and
+not from its memory: the prompt carries the previous delivered brief's text
+and Guy's messages of the 48 hours after it (by the time he sent them). The
+verdict is the last line of the answer and nothing else.
 One verdict per delivered brief: a run records which brief it judged, so a
 Friday whose brief did not go out is not a second "no" for the one before
 it. The switch-off notice is not a brief and is never judged; if it does not
@@ -488,9 +492,11 @@ as evidence (throwaway content).
 
 **Built 2026-11-11, exit check open.** The flow, the seeded job and the
 stopping rule are in and tested with the CLI stubbed (`make check`: 116
-pytest). Whether a message took up a question is read by the session that
-holds the conversation, as one last line the flow strips; the rows say
-whether and when the previous brief was delivered. The flow is 112 lines
+pytest). Whether a message took up a question is judged by the session, as
+one last line the flow strips, from what the prompt gives it out of the
+rows: the previous delivered brief and the messages of the 48 hours after
+it (amended 2026-11-14; before, it rested on what the session remembered).
+The flow is 112 lines
 against the 60 estimated: the stopping rule and the week's facts were not
 counted. The exit check (a brief run by hand, one answer) needs Guy. This is
 not the step's line.
@@ -500,6 +506,11 @@ brief once, never judges its own switch-off notice, starts again after the
 job is re-enabled, reads the verdict line leniently and stays on when the
 notice does not send (§3.6). How the job is run by hand is in the README.
 The exit check is still open.
+
+**Second review, 2026-11-14.** The verdict no longer rests on what the
+session remembers: the prompt carries the previous brief and the messages
+that followed it, and a test gives them to a session that never saw the
+brief. Only the last line is the verdict, and only a whole word counts.
 
 ### Step 5 — cutover and the first week (1 evening + 7 days)
 

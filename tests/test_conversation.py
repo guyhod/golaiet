@@ -313,7 +313,35 @@ def test_the_brief_goes_out_from_the_conversations_own_session(week, chat, monke
     assert Conversation.objects.get().session_id.startswith("3333")
     assert Message.objects.get(direction="out").job_run.job == week
     _, calls = brief_run(week, monkeypatch, "Nothing new.\nANSWERED: yes")
-    assert "Your previous brief was delivered on" in calls[0]["prompt"]
+    assert "Your previous brief, as it was delivered on" in calls[0]["prompt"]
+
+
+def test_the_verdict_is_read_from_the_rows_by_a_session_that_never_saw_the_brief(week, chat, monkeypatch):
+    brief_run(week, monkeypatch, "The beds are dug.\n1. Move the fence date?\nANSWERED: first")
+    delivered = Message.objects.get(direction="out").created_at
+    conversation = Conversation.objects.get()
+    for text, hours in (("Move the fence to the 20th", 5), ("Too late to count", 49)):
+        Message.objects.create(conversation=conversation, direction="in", text=text, sent_at=delivered + datetime.timedelta(hours=hours))
+
+    class Stranger:
+        """A session with no memory: it answers yes only when the prompt itself shows the question taken up."""
+        def __init__(self, model=None):
+            pass
+
+        def run(self, prompt, **kwargs):
+            shown = "1. Move the fence date?" in prompt and "Move the fence to the 20th" in prompt
+            assert "Too late to count" not in prompt
+            return AgentResult(text=f"Next brief.\nANSWERED: {'yes' if shown else 'no'}", session_id="4" * 8)
+
+    monkeypatch.setattr(brief, "ClaudeRunner", Stranger)
+    monkeypatch.setattr(brief.life, "today", lambda: FRIDAY)
+    assert " answered=yes " in brief.run(week, JobRun.objects.create(job=week))["summary"]
+    assert " answered=no " in brief.run(week, JobRun.objects.create(job=week))["summary"], "nothing followed the second brief"
+
+
+def test_only_the_last_line_is_the_verdict(week, chat, monkeypatch):
+    report, _ = brief_run(week, monkeypatch, "Answered last week: the fence moved.\n1. Keep the pond?\nANSWERED: first\n")
+    assert chat == ["Answered last week: the fence moved.\n1. Keep the pond?"] and " answered=first " in report["summary"]
 
 
 def test_three_unanswered_briefs_in_a_row_switch_it_off_once(week, chat, monkeypatch):
@@ -368,7 +396,7 @@ def test_a_friday_that_did_not_go_out_is_not_a_second_no_for_the_same_brief(week
 
 
 @pytest.mark.parametrize("line, verdict", [("**Answered:** No.", "no"), ("answered - YES", "yes"), ("`ANSWERED: first`", "first"),
-                                           ("ANSWERED: perhaps", "unknown")])
+                                           ("ANSWERED: perhaps", "unknown"), ("ANSWERED: not sure", "unknown")])
 def test_the_verdict_line_is_read_leniently_and_never_sent(week, chat, monkeypatch, line, verdict):
     report, _ = brief_run(week, monkeypatch, f"The beds are dug.\n1. Move the fence date?\n\n{line}")
     assert chat == ["The beds are dug.\n1. Move the fence date?"] and f"answered={verdict} " in report["summary"]

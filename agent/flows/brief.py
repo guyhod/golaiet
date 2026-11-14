@@ -9,8 +9,11 @@ It carries its own stopping rule, because the written brief it replaces went
 unanswered for weeks while everything else went on: after three delivered
 briefs in a row with no question taken up within 48 hours, the job switches
 itself off and says so once. Whether a message took up a question is a
-reading of the conversation, so the session that holds the conversation
-gives it, as one last line the flow strips before sending.
+reading, so the session gives it, as one last line the flow strips before
+sending. It reads from the rows and not from what it remembers: the prompt
+carries the previous brief as it was delivered and Guy's messages of the 48
+hours after it, so a session that was compacted, or whose own last brief was
+lost on the way, judges the same text.
 
 Each delivered brief gets one verdict. A run's summary starts with the brief
 it judged (`judged=<message id> answered=<verdict>`), so a Friday whose brief
@@ -36,9 +39,11 @@ from scheduler.models import JobRun
 ALLOWED_TOOLS = ["mcp__golaiet__list_trackers", "mcp__golaiet__get_tracker", "mcp__golaiet__search_observations"]
 TOOLS: list[str] = []
 UNANSWERED_IN_A_ROW = 3
-# Any line that starts with the word, whatever the case, markup or punctuation around it: the model
-# writes "**Answered:** No." as readily as the form it was asked for, and the line is never for Guy.
-VERDICT = re.compile(r"^[\s*_`>#-]*answered\b[\s*_`:=-]*(yes|no|first)?.*$\n?", re.I | re.M)
+ANSWER_WITHIN = datetime.timedelta(hours=48)
+# The last line, when it starts with the word, whatever the case, markup or punctuation around it:
+# the model writes "**Answered:** No." as readily as the form it was asked for. Only a whole word
+# is a verdict: "not sure" is not "no".
+VERDICT = re.compile(r"^[\s*_`>#-]*answered\b[\s*_`:=-]*(?:(yes|no|first)\b)?", re.I)
 JUDGED = re.compile(r"^judged=(\d+) answered=(\w+)")
 SWITCHED_OFF = ("The Friday brief is switched off: three in a row went by with no question taken up. "
                 "To bring it back, tick `enabled` on the job `brief` in the admin, under Jobs.")
@@ -74,9 +79,16 @@ def prompt(day: datetime.date, previous: Message | None) -> str:
     if previous is None:
         before = "No brief was delivered before this one: end with the line ANSWERED: first"
     else:
-        sent = previous.created_at.astimezone(ZoneInfo(settings.TIME_ZONE))
-        before = (f"Your previous brief was delivered on {sent:%A %Y-%m-%d %H:%M}. If a message of Guy's within 48 hours of "
-                  "it took up one of its questions, end with the line ANSWERED: yes; if none did, ANSWERED: no")
+        zone = ZoneInfo(settings.TIME_ZONE)
+        replies = Message.objects.filter(
+            conversation=previous.conversation, direction=Message.Direction.IN,
+            sent_at__gt=previous.created_at, sent_at__lte=previous.created_at + ANSWER_WITHIN).order_by("sent_at")
+        said = "\n".join(f"[{reply.sent_at.astimezone(zone):%A %H:%M}] {reply.text}" for reply in replies)
+        before = (f"Your previous brief, as it was delivered on {previous.created_at.astimezone(zone):%A %Y-%m-%d %H:%M}:\n"
+                  f"<<<\n{previous.text}\n>>>\n"
+                  f"Guy's messages in the 48 hours after it:\n<<<\n{said or '(none)'}\n>>>\n"
+                  "Judge from these two blocks alone, not from what you remember: if one of his messages took up one "
+                  "of that brief's questions, end with the line ANSWERED: yes; if none did, ANSWERED: no")
     return (
         f"[Scheduled: the Friday brief, {day:%A %Y-%m-%d}, {settings.TIME_ZONE} time. Guy did not write this message.]\n"
         "Write Guy's weekly brief from the rows below; use the read tools if a line needs its detail. Keep it short "
@@ -111,8 +123,10 @@ def run(job, run) -> dict:
     report = outcome(result, "")
     if report["failed"]:
         return report
-    given = [match.group(1) for match in VERDICT.finditer(result.text) if match.group(1)]
-    answered = given[-1].lower() if given else "unknown"
+    body, _, last = result.text.strip().rpartition("\n")
+    verdict = VERDICT.match(last)
+    answered = (verdict.group(1) or "unknown").lower() if verdict else "unknown"
+    written = body.strip() if verdict else result.text.strip()
     verdicts = {}
     earlier = JobRun.objects.filter(job=job, status=JobRun.Status.DONE).exclude(pk=run.pk).order_by("started_at")
     for summary in earlier.values_list("summary", flat=True):
@@ -122,7 +136,7 @@ def run(job, run) -> dict:
     if previous:
         verdicts[previous.pk] = answered
     switch_off = len(recent) == UNANSWERED_IN_A_ROW and all(verdicts.get(brief.pk) == "no" for brief in recent)
-    text = SWITCHED_OFF if switch_off else VERDICT.sub("", result.text).strip()
+    text = SWITCHED_OFF if switch_off else written
     outgoing = Message.objects.create(conversation=conversation, direction=Message.Direction.OUT, text=text, job_run=run)
     outgoing.telegram_message_id = telegram.send(text, chat_id=conversation.chat_id)
     outgoing.save(update_fields=["telegram_message_id"])
