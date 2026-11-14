@@ -40,6 +40,12 @@ function History({ slug, station }: { slug: string; station?: string }) {
   const { data: detail, error } = usePolled<TrackerDetail>(detailUrl(slug));
   if (error && !detail) return <Section title="History"><p className="none">Cannot load the history: {error}</p></Section>;
   if (!detail) return <Section title="History"><p className="none">Loading…</p></Section>;
+  return <Facts detail={detail} station={station} />;
+}
+
+/** The history from a tracker that is already read: a lane the map does not draw is read once, for
+ *  both what it is and what was recorded on it. */
+function Facts({ detail, station }: { detail: TrackerDetail; station?: string }) {
   const facts = historyOf(detail.recent_observations, detail.recent_assessments, station);
   return (
     <Section title="History — what was recorded" count={facts.length}>
@@ -56,7 +62,9 @@ function History({ slug, station }: { slug: string; station?: string }) {
   );
 }
 
-function StationBody({ lane, station, caption, onSelect }: { lane: Campaign; station: Station; caption?: string; onSelect: (selection: Selection) => void }) {
+function StationBody({ lane, station, caption, history, onSelect }: {
+  lane: Campaign; station: Station; caption?: string; history: ReactNode; onSelect: (selection: Selection) => void;
+}) {
   return (
     <>
       <div className="crumb">
@@ -79,12 +87,12 @@ function StationBody({ lane, station, caption, onSelect }: { lane: Campaign; sta
         <Field name="requires" value={station.requires?.join(", ")} />
         <Field name="ref" value={station.ref} />
       </div>
-      <History slug={lane.id} station={station.id} />
+      {history}
     </>
   );
 }
 
-function LaneBody({ lane, onSelect }: { lane: Campaign; onSelect: (selection: Selection) => void }) {
+function LaneBody({ lane, history, onSelect }: { lane: Campaign; history: ReactNode; onSelect: (selection: Selection) => void }) {
   return (
     <>
       <h2>{lane.title}</h2>
@@ -120,7 +128,7 @@ function LaneBody({ lane, onSelect }: { lane: Campaign; onSelect: (selection: Se
           </div>
         ))}
       </Section>
-      <History slug={lane.id} />
+      {history}
     </>
   );
 }
@@ -155,12 +163,15 @@ function Undrawn({ selection, onSelect }: { selection: Exclude<Selection, { kind
   if (!detail) return <p className="none">{error ? `Cannot load this lane: ${error}` : "Loading…"}</p>;
   const lane = laneOf(detail);
   const found = lane && selection.kind === "station" ? findStation(lane, selection.station) : undefined;
-  if (lane && found) return <StationBody lane={lane} station={found.station} caption={found.track.caption} onSelect={onSelect} />;
-  if (lane) return <LaneBody lane={lane} onSelect={onSelect} />;
+  if (lane && found) {
+    return <StationBody lane={lane} station={found.station} caption={found.track.caption} onSelect={onSelect}
+                        history={<Facts detail={detail} station={found.station.id} />} />;
+  }
+  if (lane) return <LaneBody lane={lane} onSelect={onSelect} history={<Facts detail={detail} />} />;
   return (
     <>
       <p className="none">This lane has no stations yet.</p>
-      <History slug={selection.campaign} />
+      <Facts detail={detail} />
     </>
   );
 }
@@ -176,9 +187,10 @@ export function Drawer({ selection, board, sheet, onClose, onSelect }: {
     const lane = board.lanes.find((candidate) => candidate.id === selection.campaign);
     const found = lane && selection.kind === "station" ? findStation(lane, selection.station) : undefined;
     if (lane && found) {
-      body = <StationBody lane={lane} station={found.station} caption={found.track.caption} onSelect={onSelect} />;
+      body = <StationBody lane={lane} station={found.station} caption={found.track.caption} onSelect={onSelect}
+                          history={<History slug={lane.id} station={found.station.id} />} />;
     } else if (lane) {
-      body = <LaneBody lane={lane} onSelect={onSelect} />;
+      body = <LaneBody lane={lane} onSelect={onSelect} history={<History slug={lane.id} />} />;
     } else {
       body = <Undrawn selection={selection} onSelect={onSelect} />;
     }
