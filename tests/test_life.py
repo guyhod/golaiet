@@ -364,8 +364,14 @@ def test_replace_is_refused_once_the_conversation_has_recorded(imported, monkeyp
     turn = JobRun.objects.create(job=Job.objects.create(name="reply", kind="reply", trigger="manual", schedule="", target="x"))
     monkeypatch.setenv("GOLAIET_JOB_RUN_ID", str(turn.pk))
     tools.record_observation("stretch", "2031-03-09", "", "Stretched.")
-    with pytest.raises(CommandError, match="1 observation.s. and 0 lane change"):
+    said = tools.record_observation("garden", "2031-03-10", "", "The shed is up.")
+    tools.record_assessment("garden", {"note": "shed up"}, "He said the shed is up.", [said["id"]])
+    with pytest.raises(CommandError) as refused:
         call_command("import_life", str(progress), "--replace", verbosity=0)
+    listed = str(refused.value).splitlines()
+    assert listed[1:4] == ["  stretch 2031-03-09 said: Stretched.", "  garden 2031-03-10 said: The shed is up.",
+                           f"  garden {life.today()} lane change: He said the shed is up."]
+    assert listed[4].startswith("2 observation(s) and 1 lane change(s). Nothing was changed")
     assert Tracker.objects.get(slug="stretch").observations.count() == 3
     call_command("import_life", str(progress), "--replace", "--force", verbosity=0)
     assert Tracker.objects.get(slug="stretch").observations.count() == 2

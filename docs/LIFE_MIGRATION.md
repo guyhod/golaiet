@@ -336,7 +336,8 @@ after the switch-off count.
 and their first rows. `--dry-run` prints what it would do and what it leaves
 out; `--replace` drops the life trackers and imports again, and is refused
 once the conversation has written an observation or a lane change on them,
-unless `--force` is given: it says what would be lost, and `--force` by
+unless `--force` is given: the refusal lists each row a job run wrote
+(tracker, day and its first words) and then the counts, and `--force` by
 itself is refused;
 `--events-until <date>` leaves out later events and the practices the log
 says were added after the date, whatever their first event (the replay's
@@ -449,6 +450,10 @@ pytest, 39 Vitest.
 log says was added after the date, whatever its first event; `--force`
 without `--replace` is refused; §3.7 names the two differences `--check`
 does not see.
+
+**Third review, 2026-11-14.** The refusal of `--replace` lists the rows the
+conversation recorded, a line each, before the counts, so that the list
+Step 5 says is read before forcing is one that can be read.
 
 ### Step 2 — the conversation (1½–2 evenings)
 

@@ -199,6 +199,16 @@ def rows_of(data: dict, extras: dict, events_until: datetime.date | None = None)
     return trackers, left_out
 
 
+def recorded() -> list[str]:
+    """What a job run wrote on the life trackers, a line each: the rows --replace would delete that
+    are not the import's own. Read before forcing, so they are named and not only counted."""
+    zone = ZoneInfo(settings.TIME_ZONE)
+    said = Observation.objects.filter(tracker__kind__in=LIFE, job_run__isnull=False).select_related("tracker").order_by("observed_at")
+    changed = Assessment.objects.filter(tracker__kind__in=LIFE, job_run__isnull=False).select_related("tracker").order_by("at")
+    return ([f"  {row.tracker.slug} {row.observed_at.astimezone(zone):%Y-%m-%d} said: {row.summary[:70]}" for row in said]
+            + [f"  {row.tracker.slug} {row.at.astimezone(zone):%Y-%m-%d} lane change: {row.reason[:70]}" for row in changed])
+
+
 def write(trackers: list[dict]) -> None:
     zone = ZoneInfo(settings.TIME_ZONE)
     for row in trackers:
@@ -293,12 +303,13 @@ class Command(BaseCommand):
             return
         with transaction.atomic():
             if options["replace"]:
-                said = Observation.objects.filter(tracker__kind__in=LIFE, job_run__isnull=False).count()
-                changed = Assessment.objects.filter(tracker__kind__in=LIFE, job_run__isnull=False).count()
-                if (said or changed) and not options["force"]:
-                    raise CommandError(f"--replace would delete what the conversation recorded: {said} observation(s) and "
-                                       f"{changed} lane change(s) on the life trackers. Nothing was changed; "
-                                       "--force deletes them.")
+                written = [row for row in recorded() if not options["force"]]
+                if written:
+                    said = sum(" said: " in row for row in written)
+                    raise CommandError("--replace would delete what the conversation recorded on the life trackers:\n"
+                                       + "\n".join(written)
+                                       + f"\n{said} observation(s) and {len(written) - said} lane change(s). "
+                                         "Nothing was changed; --force deletes them.")
                 Tracker.objects.filter(kind__in=LIFE).delete()
             taken = Tracker.objects.filter(slug__in=[row["slug"] for row in trackers]).values_list("slug", flat=True)
             if taken:
