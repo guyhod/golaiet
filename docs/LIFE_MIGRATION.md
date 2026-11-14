@@ -257,7 +257,8 @@ dependency in the image or the dashboard.
 |---|---|---|
 | `list_trackers(kind=None)` | one compact row per tracker; filter by kind | §1: the listing does not fit a tool result |
 | `update_tracker(…, title=None)` | a title can change; a life tracker's subject is merged field by field, `null` removes | a practice gets renamed when its definition does; a partial subject must not drop the lane's place on the map |
-| `create_tracker`, `update_tracker`, `get_tracker` | a life tracker's result carries `on_board` | a practice beyond the pulse row's seven is recorded and not drawn, and the reply should say so |
+| `create_tracker`, `update_tracker`, `get_tracker`, `record_assessment` | a life tracker's result carries `on_board` | a practice beyond the pulse row's seven, or a tenth lane once it has stations, is recorded and not drawn, and the reply should say so |
+| `create_tracker`, `update_tracker` | a `null` in a life subject is a field left out and is never stored | a stored null rank cannot be sorted against the other ranks, and the board would fail on every read |
 | `record_assessment` | calls the kind's evidence rule when it has one; `campaign` does | §3.2 |
 | `create_tracker` | `cadence` gets a default; a kind with no jobs ignores it | life kinds have no schedule |
 | `record_observation`, `create_tracker` | wording: the new kinds' fields; for life, `summary` is Guy's words | the docstring is what the model reads |
@@ -450,6 +451,11 @@ to an existing `.md` file, dated by the message; a life subject is merged
 field by field; the tools' results say whether a tracker is drawn; the
 replay gives each case its own conversation; the end-to-end stack never
 mounts the vault. The exit check is still open.
+
+**Second review, 2026-11-14.** A null in a life subject is dropped before
+it is stored and the board sorts a stored one last; `record_assessment`
+says whether the lane is drawn, so a tenth lane is reported when its
+stations arrive.
 
 ### Step 3 — the Life screen and the wall (2–3 evenings)
 

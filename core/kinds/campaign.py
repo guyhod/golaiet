@@ -49,8 +49,9 @@ def jobs(subject: dict) -> tuple[dict, ...]:
 
 
 def validate_subject(subject: dict) -> dict:
-    subject = validate(subject, SUBJECT_SCHEMA, "subject")
-    if subject.get("layout") is not None and subject["layout"] not in LAYOUTS:
+    # A null is a field left out: stored, the board would sort a null rank against the other lanes' numbers.
+    subject = {field: value for field, value in validate(subject, SUBJECT_SCHEMA, "subject").items() if value is not None}
+    if "layout" in subject and subject["layout"] not in LAYOUTS:
         raise ValueError(f"subject.layout must be one of {', '.join(LAYOUTS)}")
     return subject
 

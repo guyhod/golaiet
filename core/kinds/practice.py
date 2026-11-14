@@ -38,11 +38,12 @@ def jobs(subject: dict) -> tuple[dict, ...]:
 
 
 def validate_subject(subject: dict) -> dict:
-    subject = validate(subject, SUBJECT_SCHEMA, "subject")
+    # A null is a field left out: stored, it would be sorted and counted with as if it were a value.
+    subject = {field: value for field, value in validate(subject, SUBJECT_SCHEMA, "subject").items() if value is not None}
     if subject["color"] not in COLORS:
         raise ValueError(f"subject.color must be one of {', '.join(COLORS)}")
     iso_day(subject["started"], "subject.started")
-    if subject.get("alert_after") is not None:
+    if "alert_after" in subject:
         if subject["color"] != "red":
             raise ValueError("subject.alert_after is for a red practice: a streak has no gap to alert on")
         if subject["alert_after"] < 0:

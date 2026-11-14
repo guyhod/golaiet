@@ -106,6 +106,32 @@ def test_a_tracker_the_board_has_no_room_for_says_so(db):
     assert tools.create_tracker("garden", "Garden", "campaign", {}, "Bed by bed.")["on_board"] is False, "no stations yet"
 
 
+def test_a_lane_the_map_has_no_room_for_says_so_when_its_stations_arrive(db):
+    for number in range(10):
+        tools.create_tracker(f"lane-{number}", f"Lane {number}", "campaign", {"rank": number}, "Step by step.")
+        said = tools.record_observation(f"lane-{number}", "2031-03-08", "", "First step is the plan")
+        drawn = tools.record_assessment(f"lane-{number}", {"stations": [{"id": "s1", "label": "Plan", "track": "Start"}]},
+                                        "He named the first step.", [said["id"]])["on_board"]
+        assert drawn is (number < 9), f"lane {number}"
+
+
+def test_a_null_in_a_life_subject_is_a_field_left_out_and_the_board_still_answers(db, client):
+    tools.create_tracker("stretch", "Stretching", "practice", {"color": "red", "started": "2031-03-01", "rank": 1}, "Ten minutes.")
+    made = tools.create_tracker("walk", "Walking", "practice", {"color": "red", "started": "2031-03-01", "rank": None,
+                                                                "note": None}, "Any walk.")
+    assert made["subject"] == {"color": "red", "started": "2031-03-01"} and made["on_board"] is True
+    assert tools.create_tracker("garden", "Garden", "campaign", {"rank": None, "layout": None}, "Bed by bed.")["subject"] == {}
+    # A row stored before nulls were dropped still sorts.
+    Tracker.objects.filter(slug="walk").update(subject={"color": "red", "started": "2031-03-01", "rank": None})
+    board = client.get("/api/life")
+    assert board.status_code == 200 and [tile["id"] for tile in board.json()["pulse"]] == ["stretch", "walk"]
+    for subject in (["rank"], "file"):
+        with pytest.raises(ValueError, match="subject must be an object"):
+            tools.create_tracker("pond", "Pond", "campaign", subject, "Dig it.")
+        with pytest.raises(ValueError, match="subject must be an object"):
+            tools.update_tracker("garden", subject=subject)
+
+
 def test_a_lane_changes_only_on_a_fact_filed_in_the_same_turn(db, monkeypatch):
     tools.create_tracker("garden", "Garden", "campaign", {}, "Bed by bed.")
     earlier = tools.record_observation("garden", "2031-03-01", "", "The beds want digging.")

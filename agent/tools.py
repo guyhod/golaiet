@@ -47,8 +47,9 @@ def _tracker_dict(tracker: Tracker) -> dict:
 
 
 def _agent_subject(kind_module, subject: dict, stored: dict) -> None:
-    """Refuses a subject from the agent that sets or changes a field the kind keeps for Guy."""
-    for field in getattr(kind_module, "OWNER_FIELDS", ()):
+    """Refuses a subject from the agent that sets or changes a field the kind keeps for Guy.
+    A subject that is not an object is left for the kind to refuse."""
+    for field in getattr(kind_module, "OWNER_FIELDS", ()) if isinstance(subject, dict) else ():
         if field in subject and subject[field] != stored.get(field):
             raise ValueError(f"subject.{field} is Guy's to set, in admin: leave it out and tell him")
 
@@ -206,7 +207,7 @@ def update_tracker(slug: str, brief: str | None = None, cadence: str | None = No
         changed.append("title")
     if subject is not None:
         _agent_subject(kind_module, subject, tracker.subject)
-        if tracker.kind in kinds.LIFE:
+        if tracker.kind in kinds.LIFE and isinstance(subject, dict):
             # A life subject holds presentation the agent did not write (the lane's place on the map,
             # its short name), so a partial subject changes the fields it names and keeps the rest.
             subject = {field: value for field, value in {**tracker.subject, **subject}.items() if value is not None}
@@ -282,7 +283,9 @@ def record_assessment(slug: str, state: dict, reason: str, evidence_ids: list[in
     regroup it. level and changed are derived: leave them out. The lane is stored whole, and a change must cite
     an observation of what Guy said, filed in this same turn). reason: two to four sentences
     citing dates and figures. evidence_ids: ids of this tracker's observations you relied on.
-    A change of level raises an alert to Guy by the kind's rule; you need not raise one yourself."""
+    A change of level raises an alert to Guy by the kind's rule; you need not raise one yourself. For a
+    campaign the result carries on_board: false means the lane is recorded and not drawn (the map is full,
+    or the lane is paused); say so in the reply."""
     tracker = Tracker.objects.get(slug=slug)
     kind_module = kinds.get(tracker.kind)
     previous = tracker.assessments.order_by("-at").first()
@@ -297,7 +300,10 @@ def record_assessment(slug: str, state: dict, reason: str, evidence_ids: list[in
     if hasattr(kind_module, "check_evidence"):
         kind_module.check_evidence(evidence, _run_id())
     assessment, alert = judge(tracker, state, reason, evidence, job_run_id=_run_id())
-    return dict(_assessment_dict(assessment), alert=_alert_dict(alert) if alert else None)
+    recorded = dict(_assessment_dict(assessment), alert=_alert_dict(alert) if alert else None)
+    if tracker.kind in kinds.LIFE:
+        recorded["on_board"] = life.on_board(slug)
+    return recorded
 
 
 def judge(tracker: Tracker, state: dict, reason: str, evidence: list[Observation], *,

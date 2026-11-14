@@ -154,10 +154,16 @@ def on_board(slug: str) -> bool:
     return slug in [item["id"] for item in drawn["pulse"] + drawn["lanes"]]
 
 
+def _rank(tracker: Tracker) -> int:
+    """Where the tracker stands in its row; one without a rank goes last."""
+    rank = tracker.subject.get("rank")
+    return 999 if rank is None else rank
+
+
 def board(day: datetime.date, caps: dict = CAPS) -> dict:
     trackers = sorted(Tracker.objects.filter(kind__in=("practice", "campaign"),
                                              status__in=(Tracker.Status.ACTIVE, Tracker.Status.PAUSED)),
-                      key=lambda tracker: (tracker.subject.get("rank", 999), tracker.slug))
+                      key=lambda tracker: (_rank(tracker), tracker.slug))
     pulse = [{"id": tracker.slug, "label": tracker.title,
               **practice.tile(tracker.subject, practice.event_days(tracker.observations.all()), day)}
              for tracker in trackers if tracker.kind == "practice" and tracker.status == Tracker.Status.ACTIVE]
