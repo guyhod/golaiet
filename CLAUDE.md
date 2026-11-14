@@ -20,6 +20,10 @@ style in `/Users/guyhod/Kruv/CLAUDE.md` apply here in full.
   it, in code, comments, tests, fixtures, documents, commit messages or any
   log that is kept. Tests run on invented data. What a command needs from
   the vault (the import, the replay) it takes by path at run time.
+- **A migration that has been committed is not edited.** A change is a new
+  migration: a database that already applied the old one would get nothing,
+  `migrate` would report nothing to do, and `makemigrations --check` cannot
+  see it.
 - **`--safe-mode` and `--bare` are never passed to the CLI.** Safe mode
   disables `--mcp-config` servers; bare strips the web tools. Sessions are
   kept clean by `CLAUDE_CONFIG_DIR` and `--tools` instead (see
