@@ -18,7 +18,9 @@ deleted, so it is refused without --force and says what would go.
 
 --check writes nothing: it compares this repo's board with the vault's own
 renderer on the same file, key by key and with every list whole, and fails
-on a difference that is not one of the known ones."""
+on a difference that is not one of the known ones. Two things it does not
+see: a value the vault writes as empty counts as absent, and a lane that is
+not drawn is compared by its name alone."""
 import copy
 import datetime
 import importlib.util
@@ -126,9 +128,12 @@ def rows_of(data: dict, extras: dict, events_until: datetime.date | None = None)
         # else the earlier of the day the practice was added and its first event (a practice can be added
         # after the last time the thing happened, and its gap then counts from that earlier day).
         started = min(added[item["id"]] + events[:1]) if events else item["since"]
-        if events_until and iso_day(started, "started") > events_until:
-            # It did not exist yet on that day; imported, its counter would run backwards.
-            left_out.append(f"practice {item['id']}: it starts after {events_until}")
+        # The day it came to be counted: the day the log says it was added, whatever its first event
+        # (a practice is often added with an occurrence from before), or its start when the log is silent.
+        born = min(added[item["id"]], default=started)
+        if events_until and iso_day(born, "added") > events_until:
+            # It was not on the board yet on that day: the conversation of that day has to create it.
+            left_out.append(f"practice {item['id']}: it was added after {events_until}")
             continue
         subject = _filled({"color": item["color"], "started": started, "note": item.get("note"),
                            "alert_after": item.get("alert_after", 3) if item["color"] == "red" else None})
@@ -252,7 +257,7 @@ class Command(BaseCommand):
         parser.add_argument("--force", action="store_true",
                             help="with --replace: also when the conversation has recorded on the life trackers")
         parser.add_argument("--events-until",
-                            help="the replay's starting state: practice events after this day, and practices that start "
+                            help="the replay's starting state: practice events after this day, and practices added "
                                  "after it, are left out; lanes are imported as they stand, not as they stood then")
         parser.add_argument("--check", action="store_true", help="write nothing; compare the board with the vault's renderer")
         parser.add_argument("--on", help="the day --check compares on (default: today in Jerusalem)")
@@ -262,6 +267,8 @@ class Command(BaseCommand):
         data = read_progress(options["progress"])
         if options["check"]:
             return self.check_board(data, options)
+        if options["force"] and not options["replace"]:
+            raise CommandError("--force goes with --replace: by itself it does nothing")
         extras = json.loads(options["extras"].read_text(encoding="utf-8")) if options["extras"] else {}
         check_extras(data, extras)
         until = iso_day(options["events_until"], "--events-until") if options["events_until"] else None

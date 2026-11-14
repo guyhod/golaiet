@@ -373,10 +373,19 @@ def test_replace_is_refused_once_the_conversation_has_recorded(imported, monkeyp
 
 def test_the_replays_starting_state_leaves_out_what_did_not_exist_yet(db, vault, capsys):
     call_command("import_life", str(vault[0]), "--events-until", "2031-03-03")
-    assert "left out: practice no_snacks: it starts after 2031-03-03" in capsys.readouterr().out
+    assert "left out: practice no_snacks: it was added after 2031-03-03" in capsys.readouterr().out
     assert not Tracker.objects.filter(slug="no_snacks").exists()
     assert [tile["n"] >= 0 for tile in life.board(datetime.date(2031, 3, 3))["pulse"]] == [True]
     assert Tracker.objects.get(slug="stretch").observations.count() == 1
+    # Added on the 4th with an occurrence from the 2nd: on the 3rd it was not on the board, whatever its first event.
+    later = json.loads(json.dumps(PROGRESS))
+    later["log"][0]["at"] = "2031-03-04"
+    vault[0].write_text("```json\n" + json.dumps(later) + "\n```\n", encoding="utf-8")
+    call_command("import_life", str(vault[0]), "--replace", "--events-until", "2031-03-03")
+    assert "left out: practice stretch: it was added after 2031-03-03" in capsys.readouterr().out
+    assert not Tracker.objects.filter(kind="practice", status="active").exists()
+    with pytest.raises(CommandError, match="--force goes with --replace"):
+        call_command("import_life", str(vault[0]), "--force")
 
 
 def test_an_extras_key_nothing_reads_and_a_lane_that_is_not_valid_are_refused(db, vault):

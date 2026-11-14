@@ -333,12 +333,17 @@ after the switch-off count.
 and their first rows. `--dry-run` prints what it would do and what it leaves
 out; `--replace` drops the life trackers and imports again, and is refused
 once the conversation has written an observation or a lane change on them,
-unless `--force` is given: it says what would be lost;
-`--events-until <date>` leaves out later events and the practices that
-start after the date (the replay's starting state; lanes are not rewound,
-they are imported as they stand); `--check` compares `core.life.board()`
-with the vault's own `derive()` on the same file, both with their lists
-whole and the derived overdue checks set aside. An extras key the import
+unless `--force` is given: it says what would be lost, and `--force` by
+itself is refused;
+`--events-until <date>` leaves out later events and the practices the log
+says were added after the date, whatever their first event (the replay's
+starting state; lanes are not rewound, they are imported as they stand);
+`--check` compares `core.life.board()` with the vault's own `derive()` on
+the same file, both with their lists whole and the derived overdue checks
+set aside. Beyond the three differences Step 1 names, `--check` tolerates
+two more: a value the vault writes as empty (`""`, `false`, `null`, `[]`)
+counts as absent, and a lane that is not drawn is compared by its name
+only, since neither board carries more of it. An extras key the import
 does not read is an error. Each lane's log rows become observations on it
 (its history); each practice's event days become observations. Briefs and
 the lanes' `file` come from the extras file, which lives in the vault and
@@ -367,8 +372,10 @@ No step makes a paid API call; sessions run on the plan login and count
 against its usage windows.
 
 Before cutover the life rows in the live database are disposable: every
-comparison starts with `import_life --replace`, and what is verified live
-before Step 5 is verified with throwaway content.
+comparison starts with `import_life --replace --force` (Steps 2 and 4 leave
+throwaway rows written through the conversation, which a bare `--replace`
+refuses to delete), and what is verified live before Step 5 is verified
+with throwaway content.
 
 A step is done when its exit check has passed and a line under its heading
 says so: the date and the evidence. That line is how the next session knows
@@ -424,6 +431,11 @@ on a scratch database from the real file: every key equal or one of the
 three named differences, today and on three other days. `make check`: 150
 pytest, 39 Vitest.
 
+**Second review, 2026-11-14.** `--events-until` leaves out a practice the
+log says was added after the date, whatever its first event; `--force`
+without `--replace` is refused; §3.7 names the two differences `--check`
+does not see.
+
 ### Step 2 — the conversation (1½–2 evenings)
 
 §3.4 and §3.5. Then the replay: `manage.py replay <cases>` feeds real
@@ -465,7 +477,7 @@ stations arrive.
 
 §3.3.
 
-**Exit check:** ROADMAP exit test 2, after a fresh `--replace`: `/life` on
+**Exit check:** ROADMAP exit test 2, after a fresh `--replace --force`: `/life` on
 the wall beside the vault's page shows the same lanes, stations and states
 and the same panel content. The map is identical by construction; the
 restyled panels are checked by eye.
@@ -517,7 +529,10 @@ brief. Only the last line is the verdict, and only a whole word counts.
 **Gate:** Step 0's exit check still holds.
 
 In one evening: the three Desktop runs are paused; `import_life --replace`
-on the final `progress.md`; `--check`; the wall browser opens `/life`; the
+on the final `progress.md`, which refuses and lists what the conversation
+recorded on the life trackers: that list is read, and when it holds only the
+throwaway rows of Steps 2 and 4 the import is run again with `--force`;
+`--check`; the wall browser opens `/life`; the
 vault's `CLAUDE.md` gets a dated note that life is recorded through
 Telegram, that status lives on the board, that a Claude session in the vault
 no longer updates it, and which files are now archive.
