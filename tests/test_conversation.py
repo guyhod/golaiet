@@ -4,6 +4,7 @@ the vault, and the replay. Invented content throughout."""
 import datetime
 import io
 import json
+import os
 from pathlib import Path
 from decimal import Decimal
 
@@ -232,6 +233,7 @@ def replayed(db, tmp_path, monkeypatch, settings):
     """The replay with the CLI replaced by `scripted`: what the session files for each message."""
     settings.TELEGRAM_BOT_TOKEN, settings.TELEGRAM_CHAT_ID, settings.CLAUDE_CONFIG_DIR = "123:token", "6307", str(tmp_path / "state")
     monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "a-token")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123:token")
     tools.create_tracker("stretch", "Stretching", "practice", {"color": "red", "started": "2031-03-01"}, "Ten minutes count.")
     scripted = {"stretched": "2031-03-07", "swims": "started", "states": []}
 
@@ -241,6 +243,7 @@ def replayed(db, tmp_path, monkeypatch, settings):
 
     def session(self, prompt, *, env, **kwargs):
         scripted["states"].append(settings.CLAUDE_CONFIG_DIR)
+        assert os.environ["TELEGRAM_BOT_TOKEN"] == "", "what the CLI and its tool server inherit sends nothing either"
         monkeypatch.setenv("GOLAIET_MESSAGE_ID", str(env["GOLAIET_MESSAGE_ID"]))
         if "Stretched" in prompt:
             assert prompt.startswith("[Sent Saturday 2031-03-08 07:30")

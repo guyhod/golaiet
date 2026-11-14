@@ -489,6 +489,12 @@ that is removed, so a run leaves none of the messages on disk. The command
 is about 140 lines against the 70 of §3: these rules were not counted. How
 the scratch database is made and dropped is in the README.
 
+**Third review, 2026-11-14.** A replay cannot reach the live database or
+Telegram: every run's tool-server config names the database of the process
+that started it (name, host and port, for every run and not only a replay),
+and the replay empties the Telegram token in the environment the CLI and
+its tool server inherit, not only in its own settings.
+
 ### Step 3 — the Life screen and the wall (2–3 evenings)
 
 §3.3.

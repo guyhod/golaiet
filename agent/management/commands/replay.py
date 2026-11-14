@@ -91,7 +91,9 @@ class Command(BaseCommand):
             raise CommandError("the replay gives the CLI an empty state folder, so the login must come from "
                                "CLAUDE_CODE_OAUTH_TOKEN; it is not set, and a login kept in the state folder would be left behind")
         compared, unread = read_cases(options["cases"])
-        settings.TELEGRAM_BOT_TOKEN = ""   # the credentials are the switch: nothing is sent
+        # The credentials are the switch: nothing is sent. In the environment as well, because the tool
+        # server is another process that reads `.env` for whatever the environment it is given lacks.
+        settings.TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"] = ""
         call_command("seed_jobs", verbosity=0)
         state = tempfile.mkdtemp(prefix="golaiet-replay-")
         settings.CLAUDE_CONFIG_DIR = state
