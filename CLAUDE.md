@@ -15,6 +15,11 @@ style in `/Users/guyhod/Kruv/CLAUDE.md` apply here in full.
 
 ## Rules specific to this repo
 
+- **Nothing from the content of Guy's vault enters this repo**: no names,
+  messages, labels, counts, dates of personal events or examples taken from
+  it, in code, comments, tests, fixtures, documents, commit messages or any
+  log that is kept. Tests run on invented data. What a command needs from
+  the vault (the import, the replay) it takes by path at run time.
 - **`--safe-mode` and `--bare` are never passed to the CLI.** Safe mode
   disables `--mcp-config` servers; bare strips the web tools. Sessions are
   kept clean by `CLAUDE_CONFIG_DIR` and `--tools` instead (see
