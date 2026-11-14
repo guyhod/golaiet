@@ -40,10 +40,13 @@ ALLOWED_TOOLS = ["mcp__golaiet__list_trackers", "mcp__golaiet__get_tracker", "mc
 TOOLS: list[str] = []
 UNANSWERED_IN_A_ROW = 3
 ANSWER_WITHIN = datetime.timedelta(hours=48)
-# The last line, when it starts with the word, whatever the case, markup or punctuation around it:
-# the model writes "**Answered:** No." as readily as the form it was asked for. Only a whole word
-# is a verdict: "not sure" is not "no".
-VERDICT = re.compile(r"^[\s*_`>#-]*answered\b[\s*_`:=-]*(?:(yes|no|first)\b)?", re.I)
+# A line that is nothing but the verdict, wherever it stands and whatever the case, markup or
+# punctuation around it: the model writes "**Answered:** No." as readily as the form it was asked
+# for, and sometimes adds a line after it. A sentence of the brief that begins with the word is
+# not one: the word must be followed by a separator and at most two words. Only a whole word is
+# a verdict: "not sure" is not "no".
+VERDICT = re.compile(r"^[\s*_`>#-]*answered[*_`]*\s*[:=-]+[\s*_`]*(\w+(?: \w+)?)?[\s*_`.!]*$\n?", re.I | re.M)
+VERDICTS = ("yes", "no", "first")
 JUDGED = re.compile(r"^judged=(\d+) answered=(\w+)")
 SWITCHED_OFF = ("The Friday brief is switched off: three in a row went by with no question taken up. "
                 "To bring it back, tick `enabled` on the job `brief` in the admin, under Jobs.")
@@ -96,7 +99,8 @@ def prompt(day: datetime.date, previous: Message | None) -> str:
         "answerable in a line. Ask about what only he can say: an overdue check to move or drop, a proposal to keep "
         "or drop, a lane with nothing recorded. Record nothing now; his answers will come as ordinary messages. "
         "Write in the language he writes to you in.\n\n"
-        f"{week_of(day)}\n\n{before}. That line is for the scheduler and is removed before he sees the brief."
+        f"{week_of(day)}\n\n{before}. Write that line in English, exactly as given and alone on the last line, whatever "
+        "language the brief is in: it is for the scheduler and is removed before he sees the brief."
     )
 
 
@@ -123,10 +127,9 @@ def run(job, run) -> dict:
     report = outcome(result, "")
     if report["failed"]:
         return report
-    body, _, last = result.text.strip().rpartition("\n")
-    verdict = VERDICT.match(last)
-    answered = (verdict.group(1) or "unknown").lower() if verdict else "unknown"
-    written = body.strip() if verdict else result.text.strip()
+    given = [(match.group(1) or "").lower() for match in VERDICT.finditer(result.text)]
+    answered = given[-1] if given and given[-1] in VERDICTS else "unknown"
+    written = VERDICT.sub("", result.text).strip()
     verdicts = {}
     earlier = JobRun.objects.filter(job=job, status=JobRun.Status.DONE).exclude(pk=run.pk).order_by("started_at")
     for summary in earlier.values_list("summary", flat=True):
@@ -136,6 +139,8 @@ def run(job, run) -> dict:
     if previous:
         verdicts[previous.pk] = answered
     switch_off = len(recent) == UNANSWERED_IN_A_ROW and all(verdicts.get(brief.pk) == "no" for brief in recent)
+    if not written and not switch_off:
+        return dict(report, failed=True, summary="the session gave a verdict and no brief; nothing was sent")
     text = SWITCHED_OFF if switch_off else written
     outgoing = Message.objects.create(conversation=conversation, direction=Message.Direction.OUT, text=text, job_run=run)
     outgoing.telegram_message_id = telegram.send(text, chat_id=conversation.chat_id)

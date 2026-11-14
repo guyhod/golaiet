@@ -321,7 +321,10 @@ with no question taken up, the job switches itself off and says so once.
 Whether a question was taken up is judged by the session, from the rows and
 not from its memory: the prompt carries the previous delivered brief's text
 and Guy's messages of the 48 hours after it (by the time he sent them). The
-verdict is the last line of the answer and nothing else.
+verdict is a line that holds nothing else, asked for in English whatever
+language the brief is in. Such a line is removed wherever it stands and the
+last one counts. An answer that is only the verdict sends nothing and fails
+the run.
 One verdict per delivered brief: a run records which brief it judged, so a
 Friday whose brief did not go out is not a second "no" for the one before
 it. The switch-off notice is not a brief and is never judged; if it does not
@@ -578,6 +581,11 @@ The exit check is still open.
 session remembers: the prompt carries the previous brief and the messages
 that followed it, and a test gives them to a session that never saw the
 brief. Only the last line is the verdict, and only a whole word counts.
+
+**Third review, 2026-11-14.** A line that is nothing but the verdict is
+removed wherever it stands, so a verdict followed by one more line is no
+longer sent to Guy; the prompt asks for it in English; a reply that is only
+the verdict fails the run and sends nothing.
 
 ### Step 5 — cutover and the first week (1 evening + 7 days)
 

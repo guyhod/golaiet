@@ -473,9 +473,19 @@ def test_the_verdict_is_read_from_the_rows_by_a_session_that_never_saw_the_brief
     assert " answered=no " in brief.run(week, JobRun.objects.create(job=week))["summary"], "nothing followed the second brief"
 
 
-def test_only_the_last_line_is_the_verdict(week, chat, monkeypatch):
-    report, _ = brief_run(week, monkeypatch, "Answered last week: the fence moved.\n1. Keep the pond?\nANSWERED: first\n")
-    assert chat == ["Answered last week: the fence moved.\n1. Keep the pond?"] and " answered=first " in report["summary"]
+def test_a_line_that_is_only_the_verdict_is_removed_wherever_it_stands(week, chat, monkeypatch):
+    report, calls = brief_run(week, monkeypatch, "Answered last week: the fence moved.\n1. Keep the pond?\nANSWERED: first\nGood luck with the fence.")
+    assert chat == ["Answered last week: the fence moved.\n1. Keep the pond?\nGood luck with the fence."]
+    assert " answered=first " in report["summary"]
+    assert "Write that line in English, exactly as given" in calls[0]["prompt"]
+    report, _ = brief_run(week, monkeypatch, "ANSWERED: no\nA brief.\n**ANSWERED:** yes")
+    assert chat[-1] == "A brief." and " answered=yes " in report["summary"], "the last such line is the verdict"
+
+
+def test_a_reply_that_is_only_the_verdict_sends_nothing_and_fails(week, chat, monkeypatch):
+    report, _ = brief_run(week, monkeypatch, "ANSWERED: first\n")
+    assert report["failed"] and "no brief" in report["summary"] and chat == []
+    assert not Message.objects.filter(direction="out").exists()
 
 
 def test_three_unanswered_briefs_in_a_row_switch_it_off_once(week, chat, monkeypatch):
