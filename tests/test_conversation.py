@@ -131,6 +131,8 @@ def test_a_null_in_a_life_subject_is_a_field_left_out_and_the_board_still_answer
     Tracker.objects.filter(slug="walk").update(subject={"color": "red", "started": "2031-03-01", "rank": None})
     board = client.get("/api/life")
     assert board.status_code == 200 and [tile["id"] for tile in board.json()["pulse"]] == ["stretch", "walk"]
+    Tracker.objects.filter(slug="stretch").update(subject={"color": "red", "started": "2031-03-01", "rank": "first"})
+    assert client.get("/api/life").status_code == 200, "a rank that is not a number is a rank that is missing"
     for subject in (["rank"], "file"):
         with pytest.raises(ValueError, match="subject must be an object"):
             tools.create_tracker("pond", "Pond", "campaign", subject, "Dig it.")

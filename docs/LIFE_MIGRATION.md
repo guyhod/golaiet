@@ -12,7 +12,8 @@ No names, messages, counts or examples taken from it, in documents, tests or
 fixtures. The vault-side diagnosis, the evidence behind this plan and every
 file that holds real data live in the vault under `Golaiet/WIP/merge/`;
 commands take vault paths as arguments; tests run on invented fixtures.
-Examples below are invented. The first version of this plan (2026-11-08,
+Examples below are invented. Since 2026-11-14 the rule also stands in
+`CLAUDE.md`, as a rule of the repo that outlasts this phase. The first version of this plan (2026-11-08,
 reviewed 2026-11-09) held vault details and is archived there too.
 
 After this migration there is one agent for life (this repo's, reached over
@@ -418,6 +419,12 @@ then the reboot), a first dump by hand, where `docker` must be on the
 plists' PATH, how to see a notification without the wait, and the restore
 with the scratch database made first and the row counts that are compared.
 
+**Put off by Guy, 2026-11-14.** The Mac side of this step (the two
+settings, the launchd install, the reboot and the restore check) waits
+until he says, and he is not to be asked for it. The exit check stays open.
+Step 2's replay comes next, on his go-ahead: it runs from the host on a
+scratch database and needs nothing of this step.
+
 ### Step 1 — kinds, import, the board API (2 evenings)
 
 §3.1, §3.2, §3.7 and `GET /api/life`. A spike of the pure functions already
@@ -526,7 +533,8 @@ creates exactly one and adds no day; a case on a practice that was never
 created is not comparable, said in words, spends no session and is not a
 miss, and `--only` on such a case is refused with the id of the case to
 run first; a case with no date, tracker or effect is refused by name. The
-command is now about 210 lines.
+command is now about 210 lines. The board's sort treats a rank that is
+not a number as missing.
 
 ### Step 3 — the Life screen and the wall (2–3 evenings)
 

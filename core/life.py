@@ -155,9 +155,10 @@ def on_board(slug: str) -> bool:
 
 
 def _rank(tracker: Tracker) -> int:
-    """Where the tracker stands in its row; one without a rank goes last."""
+    """Where the tracker stands in its row. One without a rank goes last, and so does one whose
+    rank is not a number: a subject edited by hand in the database must not take the board down."""
     rank = tracker.subject.get("rank")
-    return 999 if rank is None else rank
+    return rank if isinstance(rank, (int, float)) and not isinstance(rank, bool) else 999
 
 
 def board(day: datetime.date, caps: dict = CAPS) -> dict:

@@ -104,7 +104,8 @@ without the wait. Start it again with `docker compose start scheduler`.
 **Restoring a dump**, into a database of its own beside the live one, and
 comparing the row counts of the five tables that hold what cannot be
 rebuilt. The restored counts are the live ones as of the dump: the live
-side is ahead only by the observations, messages and job runs written since.
+side is ahead only by what was written since, in any of the five (trackers,
+observations, assessments, messages, job runs).
 
 ```bash
 counts="select 'core_tracker', count(*) from core_tracker union all select 'core_observation', count(*) from core_observation union all select 'core_assessment', count(*) from core_assessment union all select 'chat_message', count(*) from chat_message union all select 'scheduler_jobrun', count(*) from scheduler_jobrun"
