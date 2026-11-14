@@ -10,7 +10,9 @@ assessment is the lane as the file has it, with the lane's log rows as its
 observations. Tasks that belong to no lane (the file's watches, and closures
 its log filed under a name that is not a lane) go to one lane that is not
 drawn. Briefs and the lanes' vault files come from the extras file, which
-stays in the vault.
+stays in the vault. Its `conventions`, Guy's rules for every report, go to
+the conversation's row, where the reply reads them; without the key the row
+is left as it is.
 
 --replace starts over. Once the conversation has recorded anything on a life
 tracker, that is no longer a rehearsal being repeated but Guy's record being
@@ -34,6 +36,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
+from chat.models import Conversation
 from core import life
 from core.kinds import LIFE, campaign, iso_day, practice
 from core.models import Assessment, Observation, Tracker
@@ -42,7 +45,7 @@ TASKS = "tasks"
 NO_BRIEF = "(no brief yet: ask Guy what counts here and how it is dated before filing anything)"
 NO_TEXT = "(imported: an event day with no text in the log)"
 CAMPAIGN_IDENTITY = ("id", "title", "short", "tracks", "hidden")
-EXTRAS_FIELDS = ("practices", "lanes", "default_lane_brief")
+EXTRAS_FIELDS = ("practices", "lanes", "default_lane_brief", "conventions")
 LANE_EXTRAS = ("brief", "file")
 # The lists --check compares whole: a cut list can hide a missing item behind the cut.
 WHOLE = 10 ** 6
@@ -61,6 +64,11 @@ def check_extras(data: dict, extras: dict) -> None:
         unknown += sorted(f"lanes.{name}.{field}" for field in set(entry) - set(LANE_EXTRAS))
     if unknown:
         raise CommandError(f"the extras file has keys the import does not read: {', '.join(unknown)}")
+    conventions = extras.get("conventions", [])
+    if not isinstance(conventions, list) or not all(isinstance(rule, str) and rule.strip() for rule in conventions):
+        raise CommandError("the extras file's `conventions` must be a list of sentences")
+    if "conventions" in extras and not settings.TELEGRAM_CHAT_ID:
+        raise CommandError("the extras file has conventions and TELEGRAM_CHAT_ID is not set: they have no conversation to go to")
 
 
 def read_progress(path: Path) -> dict:
@@ -279,6 +287,8 @@ class Command(BaseCommand):
             self.stdout.write(f"{row['kind']:8s} {row['slug']:20s} {row['status']:7s} {len(row['observations']):3d} observations{stations}{brief}")
         for reason in left_out:
             self.stdout.write(f"left out: {reason}")
+        for rule in extras.get("conventions", []):
+            self.stdout.write(f"convention: {rule.strip()}")
         if options["dry_run"]:
             return
         with transaction.atomic():
@@ -297,6 +307,10 @@ class Command(BaseCommand):
                 write(trackers)
             except ValueError as refused:
                 raise CommandError(f"nothing was imported: {refused}")
+            if "conventions" in extras:
+                Conversation.objects.update_or_create(
+                    chat_id=str(settings.TELEGRAM_CHAT_ID),
+                    defaults={"conventions": "\n".join(f"- {rule.strip()}" for rule in extras["conventions"])})
         self.stdout.write(f"imported {len(trackers)} trackers")
 
     def check_board(self, data: dict, options: dict) -> None:

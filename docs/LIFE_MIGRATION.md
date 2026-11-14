@@ -281,9 +281,12 @@ dependency in the image or the dashboard.
   say that you did. Offer a practice or a tracker that collects on a
   schedule, and open it when he says yes. Files, the vault and repositories
   cannot be reached from here: say so in one line.* The paragraph is generic
-  on purpose. Guy's own conventions (what counts for each practice, how a
-  night is dated) are in the briefs, which are rows he can edit, not text in
-  this repo.
+  on purpose. Guy's own conventions are rows he can edit, not text in this
+  repo. What counts for one practice is in its brief. What holds for every
+  report is in `Conversation.conventions`, a text field shown in admin: the reply prompt
+  carries it under the line that says when the message was sent, so a
+  practice the agent creates in conversation, which has no brief of Guy's
+  yet, is filed by the same rules.
 - The reply flow's model becomes its own setting, so the conversation can
   run on a stronger model than the collectors. Whether the model is good
   enough for life is measured before cutover (Step 2), not assumed.
@@ -347,7 +350,11 @@ only, since neither board carries more of it. An extras key the import
 does not read is an error. Each lane's log rows become observations on it
 (its history); each practice's event days become observations. Briefs and
 the lanes' `file` come from the extras file, which lives in the vault and
-carries the standing constraints the vault's memory files hold today.
+has four keys: `practices`, `lanes`, `default_lane_brief` and `conventions`.
+`conventions` is a list of sentences, the standing constraints the vault's
+memory files hold today; it is written to the conversation of
+`TELEGRAM_CHAT_ID` (§3.4), creating the row if there is none. Without the
+key the row is left as it is, and `--dry-run` prints the sentences.
 
 Guy runs the import by hand. It is his act, not the agent's.
 
@@ -493,7 +500,10 @@ the scratch database is made and dropped is in the README.
 Telegram: every run's tool-server config names the database of the process
 that started it (name, host and port, for every run and not only a replay),
 and the replay empties the Telegram token in the environment the CLI and
-its tool server inherit, not only in its own settings.
+its tool server inherit, not only in its own settings. Guy's conventions
+for every report have a home: a field on the conversation, read by every
+reply, filled by the import from the extras file's `conventions` and given
+to each replayed case's conversation.
 
 ### Step 3 — the Life screen and the wall (2–3 evenings)
 

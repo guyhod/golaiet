@@ -402,6 +402,27 @@ def test_an_extras_key_nothing_reads_and_a_lane_that_is_not_valid_are_refused(db
     assert Tracker.objects.count() == 0
 
 
+def test_the_conventions_go_to_the_conversations_row_and_are_left_alone_without_the_key(db, vault, settings, capsys):
+    from chat.models import Conversation
+    progress, extras = vault
+    extras.write_text(json.dumps({**EXTRAS, "conventions": ["Distances are given in kilometres.", " Ask when the day is unclear. "]}))
+    settings.TELEGRAM_CHAT_ID = ""
+    with pytest.raises(CommandError, match="TELEGRAM_CHAT_ID is not set"):
+        call_command("import_life", str(progress), "--extras", str(extras))
+    settings.TELEGRAM_CHAT_ID = "6307"
+    call_command("import_life", str(progress), "--extras", str(extras), "--dry-run")
+    assert "convention: Ask when the day is unclear." in capsys.readouterr().out and not Conversation.objects.exists()
+    call_command("import_life", str(progress), "--extras", str(extras), verbosity=0)
+    written = "- Distances are given in kilometres.\n- Ask when the day is unclear."
+    assert Conversation.objects.get(chat_id="6307").conventions == written
+    extras.write_text(json.dumps(EXTRAS))
+    call_command("import_life", str(progress), "--extras", str(extras), "--replace", verbosity=0)
+    assert Conversation.objects.get().conventions == written, "an extras file without the key does not empty the row"
+    extras.write_text(json.dumps({**EXTRAS, "conventions": "one long string"}))
+    with pytest.raises(CommandError, match="must be a list of sentences"):
+        call_command("import_life", str(progress), "--extras", str(extras), "--replace", verbosity=0)
+
+
 def test_the_import_never_takes_another_trackers_slug(db, vault):
     Tracker.objects.create(slug="garden", title="Garden centres", kind="topic", subject={"query": "garden centres"}, brief="-")
     with pytest.raises(CommandError, match="already exist"):

@@ -9,6 +9,11 @@ class Conversation(models.Model):
     channel = models.CharField(max_length=20, default="telegram")
     chat_id = models.CharField(max_length=64, unique=True)
     session_id = models.CharField(max_length=64, blank=True, help_text="Claude CLI session for --resume.")
+    # Guy's own rules for every report.
+    # A row and not prompt text: they are his to edit, and a practice the agent creates in
+    # conversation has no brief of its own to carry them yet.
+    conventions = models.TextField(blank=True, default="", help_text="Standing rules for every report, one per line. "
+                                   "Every reply reads them, under the line that says when the message was sent.")
     last_message_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

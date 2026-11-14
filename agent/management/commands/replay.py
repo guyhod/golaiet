@@ -109,12 +109,14 @@ class Command(BaseCommand):
 
     def run_cases(self, compared: list[tuple[dict, datetime.datetime, str | None]], only: str | None) -> int:
         reply = Job.objects.get(name="reply")
+        # Guy's standing conventions, as the import left them on his conversation's row.
+        conventions = Conversation.objects.filter(chat_id=str(settings.TELEGRAM_CHAT_ID)).values_list("conventions", flat=True).first() or ""
         stands_for = {}   # the slug the agent gave a practice it created → the id the cases know it by
         missed = 0
         for case, sent_at, born in compared:
             if only and case["id"] != only:
                 continue
-            conversation = Conversation.objects.create(chat_id=f"replay-{case['id']}")
+            conversation = Conversation.objects.create(chat_id=f"replay-{case['id']}", conventions=conventions)
             message = Message.objects.create(conversation=conversation, direction=Message.Direction.IN,
                                              text=case["text"], sent_at=sent_at)
             run = execute_job(reply, message_id=message.pk)

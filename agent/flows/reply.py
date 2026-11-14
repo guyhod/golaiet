@@ -24,9 +24,13 @@ FAILURE_REPLY = "⚠️ I couldn't answer that: {reason}"
 def prompt(message: Message) -> str:
     """The message under one line that says when it was sent. The containers
     run on UTC and the model has no clock, so "today" and "last night" are
-    counted from this line, never from now."""
+    counted from this line, never from now. Guy's standing conventions, when
+    the conversation has any, come between the two: they are a row he edits,
+    read on every message so that a change holds from the next one."""
     sent = message.sent_at.astimezone(ZoneInfo(settings.TIME_ZONE))
-    return f"[Sent {sent:%A %Y-%m-%d %H:%M}, {settings.TIME_ZONE} time]\n{message.text}"
+    conventions = message.conversation.conventions.strip()
+    standing = f"[Guy's standing conventions for every report:\n{conventions}]\n" if conventions else ""
+    return f"[Sent {sent:%A %Y-%m-%d %H:%M}, {settings.TIME_ZONE} time]\n{standing}{message.text}"
 
 
 def run(job, run, *, message_id: int) -> dict:

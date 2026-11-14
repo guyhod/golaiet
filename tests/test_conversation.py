@@ -83,6 +83,10 @@ def test_the_reply_is_told_when_the_message_was_sent_in_jerusalem(session, setti
     assert call["prompt"] == "[Sent Saturday 2031-03-08 08:22, Asia/Jerusalem time]\nStretched last night"
     assert call["model"] == "stronger" and call["locked"] and not flows.conversation_turn.locked()
     assert Conversation.objects.get().session_id.startswith("1111")
+    Conversation.objects.update(conventions="- Distances are given in kilometres.")
+    reply.run(run.job, run, message_id=poller.store_inbound(update(8, "Stretched")).pk)
+    assert session[1]["prompt"] == ("[Sent Saturday 2031-03-08 08:22, Asia/Jerusalem time]\n[Guy's standing conventions for every report:\n"
+                                    "- Distances are given in kilometres.]\nStretched")
 
 
 def test_the_listing_is_one_short_row_per_tracker(tracker):
@@ -235,6 +239,7 @@ def replayed(db, tmp_path, monkeypatch, settings):
     monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "a-token")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123:token")
     tools.create_tracker("stretch", "Stretching", "practice", {"color": "red", "started": "2031-03-01"}, "Ten minutes count.")
+    Conversation.objects.create(chat_id="6307", conventions="- Distances are given in kilometres.")
     scripted = {"stretched": "2031-03-07", "swims": "started", "states": []}
 
     def file(slug, day, env):
@@ -244,6 +249,7 @@ def replayed(db, tmp_path, monkeypatch, settings):
     def session(self, prompt, *, env, **kwargs):
         scripted["states"].append(settings.CLAUDE_CONFIG_DIR)
         assert os.environ["TELEGRAM_BOT_TOKEN"] == "", "what the CLI and its tool server inherit sends nothing either"
+        assert "conventions for every report:\n- Distances are given in kilometres" in prompt, "each case reads Guy's conventions"
         monkeypatch.setenv("GOLAIET_MESSAGE_ID", str(env["GOLAIET_MESSAGE_ID"]))
         if "Stretched" in prompt:
             assert prompt.startswith("[Sent Saturday 2031-03-08 07:30")
@@ -265,8 +271,7 @@ def replayed(db, tmp_path, monkeypatch, settings):
     cases.write_text(json.dumps(CASES))
 
     def again():
-        Message.objects.all().delete()
-        Conversation.objects.all().delete()
+        Conversation.objects.filter(chat_id__startswith="replay-").delete()
         Tracker.objects.exclude(slug="stretch").delete()
         Observation.objects.all().delete()
     return cases, scripted, again
@@ -277,7 +282,7 @@ def test_the_replay_compares_the_events_filed_with_the_events_expected(replayed,
     call_command("replay", str(cases))
     printed = capsys.readouterr().out
     assert printed.count("ok  ") == 3 and "not run, to be read by hand: c2" in printed and "every event landed" in printed
-    assert Conversation.objects.count() == 3, "each compared case starts a session of its own, and the others start none"
+    assert Conversation.objects.filter(chat_id__startswith="replay-").count() == 3, "each compared case starts a session of its own, and the others start none"
     assert len(set(scripted["states"])) == 1 and scripted["states"][0] != str(tmp_path / "state")
     assert not Path(scripted["states"][0]).exists(), "the transcripts' folder is gone when the replay ends"
     with pytest.raises(CommandError, match="scratch database"):
