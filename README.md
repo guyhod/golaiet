@@ -45,6 +45,22 @@ This is a second process beside the scheduler, so it does not wait for a
 reply that is being written: run `brief` when no message is in flight, or
 the two would resume the conversation's session at once.
 
+**The replay's scratch database.** The replay (Step 2 of the life plan)
+runs real sessions on a database of its own, made beside the live one and
+dropped afterwards. It refuses a database that holds a conversation, keeps
+the CLI's transcripts in a temporary folder it removes, and needs
+`CLAUDE_CODE_OAUTH_TOKEN` in `.env`:
+
+```bash
+docker exec golaiet-db sh -c 'createdb -U "$POSTGRES_USER" golaiet_scratch'
+export DB_NAME=golaiet_scratch            # this shell only; every manage.py below goes to the scratch database
+./.venv/bin/python manage.py migrate
+./.venv/bin/python manage.py import_life <progress.md> --extras <extras.json> --events-until <the day before the first case>
+./.venv/bin/python manage.py replay <cases.json>
+unset DB_NAME
+docker exec golaiet-db sh -c 'dropdb -U "$POSTGRES_USER" golaiet_scratch'
+```
+
 **The watcher and the nightly dump** run outside the stack, under launchd.
 Nothing in this repo installs them:
 

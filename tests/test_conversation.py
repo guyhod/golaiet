@@ -4,6 +4,7 @@ the vault, and the replay. Invented content throughout."""
 import datetime
 import io
 import json
+from pathlib import Path
 from decimal import Decimal
 
 import pytest
@@ -219,39 +220,100 @@ CASES = {"cases": [
      "expected": [{"tracker": "stretch", "effect": "event", "date": "2031-03-07"}]},
     {"id": "c2", "sent": {"date": "2031-03-09", "assumed_time": "09:00"}, "text": "What is the weather like?",
      "expected": [{"tracker": "garden", "effect": "answer_only"}]},
+    {"id": "c3", "sent": {"date": "2031-03-09", "time": "21:00"}, "text": "Count my swims from now on; I swam today",
+     "expected": [{"tracker": "swim", "effect": "new_tracker"}, {"tracker": "swim", "effect": "event", "date": "2031-03-09"}]},
+    {"id": "c4", "sent": {"date": "2031-03-11", "time": "08:00"}, "text": "Swam yesterday",
+     "expected": [{"tracker": "swim", "effect": "event", "date": "2031-03-10"}]},
 ]}
 
 
-def test_the_replay_compares_the_events_filed_with_the_events_expected(db, tmp_path, monkeypatch, capsys, settings):
-    settings.TELEGRAM_BOT_TOKEN, settings.TELEGRAM_CHAT_ID = "123:token", "6307"
+@pytest.fixture
+def replayed(db, tmp_path, monkeypatch, settings):
+    """The replay with the CLI replaced by `scripted`: what the session files for each message."""
+    settings.TELEGRAM_BOT_TOKEN, settings.TELEGRAM_CHAT_ID, settings.CLAUDE_CONFIG_DIR = "123:token", "6307", str(tmp_path / "state")
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "a-token")
     tools.create_tracker("stretch", "Stretching", "practice", {"color": "red", "started": "2031-03-01"}, "Ten minutes count.")
-    cases = tmp_path / "cases.json"
-    cases.write_text(json.dumps(CASES))
-    filed_on = {"day": "2031-03-07"}
+    scripted = {"stretched": "2031-03-07", "swims": "started", "states": []}
+
+    def file(slug, day, env):
+        Observation.objects.create(tracker=Tracker.objects.get(slug=slug), summary="As he said",
+                                   observed_at=tools._parse_when(day, "day"), job_run_id=env["GOLAIET_JOB_RUN_ID"])
 
     def session(self, prompt, *, env, **kwargs):
+        scripted["states"].append(settings.CLAUDE_CONFIG_DIR)
+        monkeypatch.setenv("GOLAIET_MESSAGE_ID", str(env["GOLAIET_MESSAGE_ID"]))
         if "Stretched" in prompt:
             assert prompt.startswith("[Sent Saturday 2031-03-08 07:30")
-            Observation.objects.create(tracker=Tracker.objects.get(slug="stretch"), summary="Stretched last night",
-                                       observed_at=tools._parse_when(filed_on["day"], "day"), job_run_id=env["GOLAIET_JOB_RUN_ID"])
+            file("stretch", scripted["stretched"], env)
+        if "Count my swims" in prompt and scripted["swims"]:
+            # The agent's own name for it, not the one the cases use.
+            tools.create_tracker("swimming-laps", "Swimming", "practice", {"color": "red", "started": "2031-03-09"}, "Any swim.")
+            if scripted["swims"] == "event":
+                file("swimming-laps", "2031-03-09", env)
+            if scripted["swims"] == "twice":
+                tools.create_tracker("pool", "Pool", "practice", {"color": "red", "started": "2031-03-09"}, "Any swim.")
+        if "Swam yesterday" in prompt and Tracker.objects.filter(slug="swimming-laps").exists():
+            file("swimming-laps", "2031-03-10", env)
         return AgentResult(text="Recorded.", session_id="11111111-1111-1111-1111-111111111111")
 
     monkeypatch.setattr(reply.ClaudeRunner, "run", session)
     monkeypatch.setattr(telegram, "_post", lambda *a, **k: pytest.fail("the replay sends nothing"))
+    cases = tmp_path / "cases.json"
+    cases.write_text(json.dumps(CASES))
+
+    def again():
+        Message.objects.all().delete()
+        Conversation.objects.all().delete()
+        Tracker.objects.exclude(slug="stretch").delete()
+        Observation.objects.all().delete()
+    return cases, scripted, again
+
+
+def test_the_replay_compares_the_events_filed_with_the_events_expected(replayed, capsys, tmp_path, settings):
+    cases, scripted, again = replayed
     call_command("replay", str(cases))
-    assert capsys.readouterr().out.count("ok  ") == 2
-    assert Conversation.objects.count() == 2, "each case starts a session of its own"
+    printed = capsys.readouterr().out
+    assert printed.count("ok  ") == 3 and "not run, to be read by hand: c2" in printed and "every event landed" in printed
+    assert Conversation.objects.count() == 3, "each compared case starts a session of its own, and the others start none"
+    assert len(set(scripted["states"])) == 1 and scripted["states"][0] != str(tmp_path / "state")
+    assert not Path(scripted["states"][0]).exists(), "the transcripts' folder is gone when the replay ends"
     with pytest.raises(CommandError, match="scratch database"):
         call_command("replay", str(cases))
-    Message.objects.all().delete()
-    Conversation.objects.all().delete()
-    filed_on["day"] = "2031-03-08"
+    again()
+    scripted["stretched"] = "2031-03-08"
     with pytest.raises(CommandError, match="1 case"):
         call_command("replay", str(cases))
     assert "MISS c1" in capsys.readouterr().out
-    Message.objects.all().delete()
-    cases.write_text(json.dumps({"cases": [{"id": "c3", "sent": {"date": "2031-03-08"}, "text": "Stretched", "expected": []}]}))
-    with pytest.raises(CommandError, match="c3: `sent` needs a time"):
+
+
+@pytest.mark.parametrize("swims, missed", [("event", []), ("twice", ["c3", "c4"]), ("", ["c3", "c4"])])
+def test_a_practice_born_in_the_replay_is_known_by_the_tracker_its_case_created(replayed, capsys, swims, missed):
+    cases, scripted, _ = replayed
+    scripted["swims"] = swims
+    if missed:
+        with pytest.raises(CommandError, match=f"{len(missed)} case"):
+            call_command("replay", str(cases))
+    else:
+        call_command("replay", str(cases))
+    printed = capsys.readouterr().out
+    assert [f"MISS {case}" in printed for case in ("c1", "c3", "c4")] == [False, "c3" in missed, "c4" in missed]
+    if missed:
+        assert f"it should create one practice (swim) and created {2 if swims == 'twice' else 0}" in printed
+
+
+def test_the_replay_checks_every_case_before_it_spends_a_session(replayed, monkeypatch):
+    cases, _, _ = replayed
+    monkeypatch.setattr(reply.ClaudeRunner, "run", lambda *a, **k: pytest.fail("no session before the cases are checked"))
+    broken = json.loads(json.dumps(CASES))
+    broken["cases"][2]["sent"] = {"date": "2031-03-09", "time": "21:3x"}
+    broken["cases"][3]["id"] = "c1"
+    broken["cases"].append({"id": "c5", "sent": {"date": "2031-03-12"}, "text": "Stretched", "expected": CASES["cases"][0]["expected"]})
+    cases.write_text(json.dumps(broken))
+    with pytest.raises(CommandError, match="no session was run: c3: `sent` needs .*'21:3x'; c1: the id repeats; c5: `sent` needs"):
+        call_command("replay", str(cases))
+    assert not Message.objects.exists()
+    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN")
+    with pytest.raises(CommandError, match="CLAUDE_CODE_OAUTH_TOKEN"):
         call_command("replay", str(cases))
 
 

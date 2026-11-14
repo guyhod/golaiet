@@ -471,7 +471,16 @@ mounts the vault. The exit check is still open.
 **Second review, 2026-11-14.** A null in a life subject is dropped before
 it is stored and the board sorts a stored one last; `record_assessment`
 says whether the lane is drawn, so a tenth lane is reported when its
-stations arrive.
+stations arrive. The replay runs only the cases that expect a practice
+event and lists the others at the end as the reading list; it checks every
+case (a time that cannot be read, an id that repeats) before the first
+session; a practice first mentioned inside the replayed window is left out
+of the starting state and is known afterwards by the tracker its case's run
+created, and a case that should create one practice and creates none or two
+is a miss said in words; the CLI's transcripts go to a temporary folder
+that is removed, so a run leaves none of the messages on disk. The command
+is about 140 lines against the 70 of §3: these rules were not counted. How
+the scratch database is made and dropped is in the README.
 
 ### Step 3 — the Life screen and the wall (2–3 evenings)
 
