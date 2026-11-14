@@ -492,7 +492,10 @@ session; a practice first mentioned inside the replayed window is left out
 of the starting state and is known afterwards by the tracker its case's run
 created, and a case that should create one practice and creates none or two
 is a miss said in words; the CLI's transcripts go to a temporary folder
-that is removed, so a run leaves none of the messages on disk. The command
+that is removed, so a run leaves no transcript behind. The messages are
+still in the scratch database until it is dropped, and the replay prints
+the start of each reply to the terminal (corrected 2026-11-14: this line
+said nothing of the messages stays on disk). The command
 is about 140 lines against the 70 of §3: these rules were not counted. How
 the scratch database is made and dropped is in the README.
 
@@ -503,7 +506,19 @@ and the replay empties the Telegram token in the environment the CLI and
 its tool server inherit, not only in its own settings. Guy's conventions
 for every report have a home: a field on the conversation, read by every
 reply, filled by the import from the extras file's `conventions` and given
-to each replayed case's conversation.
+to each replayed case's conversation. The replay's comparison is each
+practice's event days before and after the case's run: every expected day
+is there afterwards and every day the run added was expected, so a second
+report of a day is no miss; an expected event may carry `or`, other days
+that are as fair a reading; in the case that creates a practice, its
+`started` meets an expected day only when that day is before the day the
+message was sent; a case that should create a practice a later case
+reports on is run even when it expects no event, and passes when it
+creates exactly one and adds no day; a case on a practice that was never
+created is not comparable, said in words, spends no session and is not a
+miss, and `--only` on such a case is refused with the id of the case to
+run first; a case with no date, tracker or effect is refused by name. The
+command is now about 210 lines.
 
 ### Step 3 — the Life screen and the wall (2–3 evenings)
 

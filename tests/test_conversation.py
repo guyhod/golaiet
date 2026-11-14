@@ -220,93 +220,144 @@ def test_a_note_that_did_not_reach_the_file_is_reported_not_believed(garden, mon
         tools.add_note("garden", "lost on the way")
 
 
+def event(tracker, date, **more):
+    return {"tracker": tracker, "effect": "event", "date": date, **more}
+
+
 CASES = {"cases": [
-    {"id": "c1", "sent": {"date": "2031-03-08", "time": "07:30"}, "text": "Stretched last night",
-     "expected": [{"tracker": "stretch", "effect": "event", "date": "2031-03-07"}]},
+    {"id": "c1", "sent": {"date": "2031-03-08", "time": "07:30"}, "text": "Stretched last night", "expected": [event("stretch", "2031-03-07")]},
     {"id": "c2", "sent": {"date": "2031-03-09", "assumed_time": "09:00"}, "text": "What is the weather like?",
      "expected": [{"tracker": "garden", "effect": "answer_only"}]},
     {"id": "c3", "sent": {"date": "2031-03-09", "time": "21:00"}, "text": "Count my swims from now on; I swam today",
-     "expected": [{"tracker": "swim", "effect": "new_tracker"}, {"tracker": "swim", "effect": "event", "date": "2031-03-09"}]},
-    {"id": "c4", "sent": {"date": "2031-03-11", "time": "08:00"}, "text": "Swam yesterday",
-     "expected": [{"tracker": "swim", "effect": "event", "date": "2031-03-10"}]},
+     "expected": [{"tracker": "swim", "effect": "new_tracker"}, event("swim", "2031-03-09")]},
+    {"id": "c4", "sent": {"date": "2031-03-11", "time": "08:00"}, "text": "Swam yesterday", "expected": [event("swim", "2031-03-10")]},
+    {"id": "c5", "sent": {"date": "2031-03-11", "time": "09:00"}, "text": "As I said, I did stretch on the 7th", "expected": [event("stretch", "2031-03-07")]},
+    {"id": "c6", "sent": {"date": "2031-03-12", "time": "00:30"}, "text": "Stretched around midnight",
+     "expected": [event("stretch", "2031-03-11", **{"or": ["2031-03-12"]})]},
+    {"id": "c7", "sent": {"date": "2031-03-12", "time": "10:00"}, "text": "Start counting my naps",
+     "expected": [{"tracker": "nap", "effect": "new_tracker"}, {"tracker": "nap", "effect": "start", "date": "2031-03-12"}]},
+    {"id": "c8", "sent": {"date": "2031-03-13", "time": "18:00"}, "text": "Napped after lunch", "expected": [event("nap", "2031-03-13")]},
 ]}
+# What the session does on each message: ("create", slug, started) and ("file", slug, day). The slugs
+# of the practices it creates are its own, not the ids the cases use.
+SCRIPT = {
+    "Stretched last night": [("file", "stretch", "2031-03-07")],
+    "Count my swims from now on; I swam today": [("create", "swimming-laps", "2031-03-09"), ("file", "swimming-laps", "2031-03-09")],
+    "Swam yesterday": [("file", "swimming-laps", "2031-03-10")],
+    "As I said, I did stretch on the 7th": [("file", "stretch", "2031-03-07")],
+    "Stretched around midnight": [("file", "stretch", "2031-03-12")],
+    "Start counting my naps": [("create", "naps", "2031-03-12")],
+    "Napped after lunch": [("file", "naps", "2031-03-13")],
+}
 
 
 @pytest.fixture
 def replayed(db, tmp_path, monkeypatch, settings):
-    """The replay with the CLI replaced by `scripted`: what the session files for each message."""
+    """The replay with the CLI replaced by a script of what the session files for each message."""
     settings.TELEGRAM_BOT_TOKEN, settings.TELEGRAM_CHAT_ID, settings.CLAUDE_CONFIG_DIR = "123:token", "6307", str(tmp_path / "state")
     monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "a-token")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123:token")
     tools.create_tracker("stretch", "Stretching", "practice", {"color": "red", "started": "2031-03-01"}, "Ten minutes count.")
     Conversation.objects.create(chat_id="6307", conventions="- Distances are given in kilometres.")
-    scripted = {"stretched": "2031-03-07", "swims": "started", "states": []}
-
-    def file(slug, day, env):
-        Observation.objects.create(tracker=Tracker.objects.get(slug=slug), summary="As he said",
-                                   observed_at=tools._parse_when(day, "day"), job_run_id=env["GOLAIET_JOB_RUN_ID"])
+    script, states = dict(SCRIPT), []
 
     def session(self, prompt, *, env, **kwargs):
-        scripted["states"].append(settings.CLAUDE_CONFIG_DIR)
+        states.append(settings.CLAUDE_CONFIG_DIR)
         assert os.environ["TELEGRAM_BOT_TOKEN"] == "", "what the CLI and its tool server inherit sends nothing either"
         assert "conventions for every report:\n- Distances are given in kilometres" in prompt, "each case reads Guy's conventions"
         monkeypatch.setenv("GOLAIET_MESSAGE_ID", str(env["GOLAIET_MESSAGE_ID"]))
-        if "Stretched" in prompt:
-            assert prompt.startswith("[Sent Saturday 2031-03-08 07:30")
-            file("stretch", scripted["stretched"], env)
-        if "Count my swims" in prompt and scripted["swims"]:
-            # The agent's own name for it, not the one the cases use.
-            tools.create_tracker("swimming-laps", "Swimming", "practice", {"color": "red", "started": "2031-03-09"}, "Any swim.")
-            if scripted["swims"] == "event":
-                file("swimming-laps", "2031-03-09", env)
-            if scripted["swims"] == "twice":
-                tools.create_tracker("pool", "Pool", "practice", {"color": "red", "started": "2031-03-09"}, "Any swim.")
-        if "Swam yesterday" in prompt and Tracker.objects.filter(slug="swimming-laps").exists():
-            file("swimming-laps", "2031-03-10", env)
+        for action, slug, day in script.get(prompt.rpartition("\n")[2], []):
+            if action == "create":
+                tools.create_tracker(slug, slug.title(), "practice", {"color": "red", "started": day}, "Any one counts.")
+            elif Tracker.objects.filter(slug=slug).exists():
+                Observation.objects.create(tracker=Tracker.objects.get(slug=slug), summary="As he said",
+                                           observed_at=tools._parse_when(day, "day"), job_run_id=env["GOLAIET_JOB_RUN_ID"])
         return AgentResult(text="Recorded.", session_id="11111111-1111-1111-1111-111111111111")
 
     monkeypatch.setattr(reply.ClaudeRunner, "run", session)
     monkeypatch.setattr(telegram, "_post", lambda *a, **k: pytest.fail("the replay sends nothing"))
     cases = tmp_path / "cases.json"
     cases.write_text(json.dumps(CASES))
-
-    def again():
-        Conversation.objects.filter(chat_id__startswith="replay-").delete()
-        Tracker.objects.exclude(slug="stretch").delete()
-        Observation.objects.all().delete()
-    return cases, scripted, again
+    return cases, script, states
 
 
-def test_the_replay_compares_the_events_filed_with_the_events_expected(replayed, capsys, tmp_path, settings):
-    cases, scripted, again = replayed
-    call_command("replay", str(cases))
+def replay(cases, capsys, *more, misses=0):
+    """The replay's lines by case id; fails unless exactly `misses` cases missed."""
+    if misses:
+        with pytest.raises(CommandError, match=f"^{misses} case"):
+            call_command("replay", str(cases), *more)
+    else:
+        call_command("replay", str(cases), *more)
     printed = capsys.readouterr().out
-    assert printed.count("ok  ") == 3 and "not run, to be read by hand: c2" in printed and "every event landed" in printed
-    assert Conversation.objects.filter(chat_id__startswith="replay-").count() == 3, "each compared case starts a session of its own, and the others start none"
-    assert len(set(scripted["states"])) == 1 and scripted["states"][0] != str(tmp_path / "state")
-    assert not Path(scripted["states"][0]).exists(), "the transcripts' folder is gone when the replay ends"
+    verdicts = {line.split()[1]: line.split()[0] for line in printed.splitlines() if line[:4] in ("ok  ", "MISS", "n/c ")}
+    return verdicts, printed
+
+
+def test_the_replay_compares_each_practices_days_before_and_after_the_run(replayed, capsys, tmp_path):
+    cases, _, states = replayed
+    verdicts, printed = replay(cases, capsys)
+    assert verdicts == {case: "ok" for case in ("c1", "c3", "c4", "c5", "c6", "c7", "c8")}, printed
+    assert "not run, to be read by hand: c2" in printed and printed.rstrip().endswith("every event landed")
+    assert Conversation.objects.filter(chat_id__startswith="replay-").count() == 7, "a session of its own per case that is run"
+    assert len(set(states)) == 1 and states[0] != str(tmp_path / "state")
+    assert not Path(states[0]).exists(), "the transcripts' folder is gone when the replay ends"
     with pytest.raises(CommandError, match="scratch database"):
         call_command("replay", str(cases))
-    again()
-    scripted["stretched"] = "2031-03-08"
-    with pytest.raises(CommandError, match="1 case"):
-        call_command("replay", str(cases))
-    assert "MISS c1" in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("swims, missed", [("event", []), ("twice", ["c3", "c4"]), ("", ["c3", "c4"])])
-def test_a_practice_born_in_the_replay_is_known_by_the_tracker_its_case_created(replayed, capsys, swims, missed):
-    cases, scripted, _ = replayed
-    scripted["swims"] = swims
-    if missed:
-        with pytest.raises(CommandError, match=f"{len(missed)} case"):
-            call_command("replay", str(cases))
-    else:
-        call_command("replay", str(cases))
-    printed = capsys.readouterr().out
-    assert [f"MISS {case}" in printed for case in ("c1", "c3", "c4")] == [False, "c3" in missed, "c4" in missed]
-    if missed:
-        assert f"it should create one practice (swim) and created {2 if swims == 'twice' else 0}" in printed
+def test_a_day_that_is_missing_and_a_day_nobody_expected_are_both_misses(replayed, capsys):
+    cases, script, _ = replayed
+    script["Stretched last night"] = [("file", "stretch", "2031-03-08")]
+    script["As I said, I did stretch on the 7th"] = []
+    script["Stretched around midnight"] = [("file", "stretch", "2031-03-11"), ("file", "stretch", "2031-03-10")]
+    verdicts, printed = replay(cases, capsys, misses=3)
+    assert [verdicts[case] for case in ("c1", "c5", "c6")] == ["MISS", "MISS", "MISS"]
+    assert "wanted stretch on 2031-03-07; its days are now ['2031-03-08']" in printed
+    assert "added stretch on 2031-03-08, which was not expected" in printed
+    assert "added stretch on 2031-03-10, which was not expected" in printed and "added stretch on 2031-03-11" not in printed
+
+
+@pytest.mark.parametrize("expected_day, does, verdict", [
+    ("2031-03-08", [("create", "swimming-laps", "2031-03-08")], "ok"),     # a start in the past is the report itself
+    ("2031-03-09", [("create", "swimming-laps", "2031-03-09")], "MISS"),   # a start on the sending day is only the default
+])
+def test_a_start_counts_as_the_report_only_when_it_is_before_the_day_of_the_message(replayed, capsys, expected_day, does, verdict):
+    cases, script, _ = replayed
+    told = json.loads(json.dumps(CASES))
+    told["cases"][2]["expected"][1]["date"] = expected_day
+    cases.write_text(json.dumps(told))
+    script["Count my swims from now on; I swam today"] = does
+    verdicts, _ = replay(cases, capsys, misses=int(verdict == "MISS"))
+    assert (verdicts["c3"], verdicts["c4"]) == (verdict, "ok"), "the practice was born either way, so the later case is compared"
+
+
+@pytest.mark.parametrize("does, created", [([], 0), ([("create", "swimming-laps", "2031-03-09"), ("create", "pool", "2031-03-09")], 2)])
+def test_a_report_on_a_practice_that_was_never_born_is_not_comparable_and_not_a_miss(replayed, capsys, does, created):
+    cases, script, _ = replayed
+    script["Count my swims from now on; I swam today"] = does
+    verdicts, printed = replay(cases, capsys, misses=1)
+    assert (verdicts["c3"], verdicts["c4"]) == ("MISS", "n/c")
+    assert f"it should create one practice (swim) and created {created}" in printed
+    assert "c4 not comparable: swim was never created" in printed
+    assert not Conversation.objects.filter(chat_id="replay-c4").exists(), "no session is spent on it"
+
+
+def test_a_case_that_only_bears_a_practice_passes_when_it_creates_one_and_adds_no_day(replayed, capsys):
+    cases, script, _ = replayed
+    script["Start counting my naps"] = [("create", "naps", "2031-03-12"), ("file", "naps", "2031-03-12")]
+    verdicts, printed = replay(cases, capsys, misses=1)
+    assert (verdicts["c7"], verdicts["c8"]) == ("MISS", "ok") and "added nap on 2031-03-12, which was not expected" in printed
+
+
+def test_only_runs_one_case_and_names_the_case_that_must_come_first(replayed, capsys):
+    cases, _, _ = replayed
+    with pytest.raises(CommandError, match="--only c4: it reports on a practice that c3 creates"):
+        call_command("replay", str(cases), "--only", "c4")
+    with pytest.raises(CommandError, match="--only c2: no case of that id"):
+        call_command("replay", str(cases), "--only", "c2")
+    assert not Message.objects.exists()
+    verdicts, _ = replay(cases, capsys, "--only", "c3")
+    assert verdicts == {"c3": "ok"}
 
 
 def test_the_replay_checks_every_case_before_it_spends_a_session(replayed, monkeypatch):
@@ -315,10 +366,23 @@ def test_the_replay_checks_every_case_before_it_spends_a_session(replayed, monke
     broken = json.loads(json.dumps(CASES))
     broken["cases"][2]["sent"] = {"date": "2031-03-09", "time": "21:3x"}
     broken["cases"][3]["id"] = "c1"
-    broken["cases"].append({"id": "c5", "sent": {"date": "2031-03-12"}, "text": "Stretched", "expected": CASES["cases"][0]["expected"]})
+    del broken["cases"][4]["sent"]["date"]
     cases.write_text(json.dumps(broken))
-    with pytest.raises(CommandError, match="no session was run: c3: `sent` needs .*'21:3x'; c1: the id repeats; c5: `sent` needs"):
+    with pytest.raises(CommandError, match="no session was run: c1: the id repeats"):
         call_command("replay", str(cases))
+    broken["cases"][3]["id"] = "c4"
+    cases.write_text(json.dumps(broken))
+    with pytest.raises(CommandError, match="no session was run: c3: `sent` needs .*'21:3x'; c5: `sent` needs a date"):
+        call_command("replay", str(cases))
+    shapeless = {"cases": [{"id": "d1", "sent": {"date": "2031-03-08", "time": "07:30"}, "text": "Stretched", "expected": [
+        {"tracker": "stretch", "effect": "event"}, {"effect": "event", "date": "2031-03-08"}, {"tracker": "stretch"}]},
+        {"sent": {"date": "2031-03-08"}, "text": "No id", "expected": []}, {"id": "d3", "text": "No time at all", "expected": []}]}
+    cases.write_text(json.dumps(shapeless))
+    with pytest.raises(CommandError) as refused:
+        call_command("replay", str(cases))
+    for words in ("d1: an expected effect has no date", "d1: an expected effect has no tracker", "d1: an expected effect has no effect",
+                  "d3: a case needs `sent`"):
+        assert words in str(refused.value)
     assert not Message.objects.exists()
     monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN")
     with pytest.raises(CommandError, match="CLAUDE_CODE_OAUTH_TOKEN"):
