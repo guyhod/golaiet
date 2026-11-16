@@ -32,7 +32,7 @@ creates rows and schedules jobs. It does not deploy anything. Only a new
 | Antisemitism around the globe | `topic` | query + region list | scheduled LLM web research, sources cited | level per region + trend, with reason | feed now, map later | weekly digest; alert on level change |
 | Risk of war in Israel | `country_risk` | `ISR` + neighbours | the conflict-map research prompt, on a schedule | heat + peace score with reason and history | globe + sidebar | alert on level change, details on request |
 | A stock I hold | `stock` | ticker + thresholds | price every 15 min in market hours; news daily | threshold crossing; "thesis assumption changed" | price panel + evidence list | alert when a line is crossed |
-| VRAM supply and pricing (InferSky) | `topic` | query | scheduled research of vendor pages, news | supply/price trend with reason | feed | digest; alert on a sharp change |
+| VRAM supply and pricing (X) | `topic` | query | scheduled research of vendor pages, news | supply/price trend with reason | feed | digest; alert on a sharp change |
 
 Three of the four need no new code once the `topic` and `country_risk`
 kinds exist. That is the test of the framing.
@@ -54,7 +54,7 @@ If more is useful, the reply carries it. Guy does not touch the screen.
 ### Loop B: a request creates tracking
 
 ```
-Guy (Telegram): "track VRAM pricing and supply, I'm looking at InferSky"
+Guy (Telegram): "track VRAM pricing and supply, I'm looking at X"
 Golaiet:  no tracker matches
           creates tracker topic/vram-supply with a brief (standing instructions)
           schedules collect (daily) and assess (weekly) jobs
