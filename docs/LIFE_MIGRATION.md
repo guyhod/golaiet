@@ -566,6 +566,10 @@ event day, and the result of filing one carries the event day before it
 and the days between the two, worked out from the rows; the life paragraph
 tells the reply to name the day and the gap the result gives.
 
+**2026-11-16.** The code is on the running stack and the board is
+imported, ready for the live part of the exit check, which is Guy's: a
+forwarded message, a consultation.
+
 ### Step 3 — the Life screen and the wall (2–3 evenings)
 
 §3.3.
