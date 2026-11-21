@@ -652,6 +652,12 @@ back inside the week: the runs are resumed and a session in the vault
 re-enters the week from the message list in admin, about half an hour for a
 week of messages.
 
+**2026-11-21.** The evening of the cutover is done: the three runs were
+paused by Guy on 2026-11-20, the last import ran and `--check` passed, and
+the Friday brief is on. The gate was passed over on Guy's decision, with
+Step 0's Mac side still open. The seven days' exit check is open until
+2026-11-27.
+
 Total: 7½–10 evenings and the week.
 
 ## 6. What changes for Guy on the day of cutover
