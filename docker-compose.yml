@@ -1,8 +1,11 @@
-# The whole stack on the Mac: db + migrate + scheduler + web (Django) +
-# dashboard (nginx serving the React build, proxying /api, /admin and /static
-# to web). restart: always brings everything back with Docker Desktop after a
-# reboot. Host ports: 5435 Postgres (5432 organism, 5433 investment engine,
-# 5434 conflict map), 8003 dashboard; Django is reached only through it.
+# The whole stack, on whichever machine runs it (the Mac, or the host of
+# docs/ops/HOST.md): db + migrate + scheduler + web (Django) + dashboard
+# (nginx serving the React build, proxying /api, /admin and /static to web).
+# restart: always brings everything back with Docker after a reboot. Ports
+# on the machine, its own address only: 5435 Postgres (on the Mac 5432 is the
+# organism's, 5433 the investment engine's, 5434 the conflict map's), 8003
+# dashboard; Django is reached only through it. On a host the private
+# network's proxy hands 8003 on; nothing here listens to any other address.
 x-app: &app
   build: .
   env_file: .env
@@ -61,12 +64,16 @@ services:
       # The vault, for add_note alone; no other service sees it. Unset, an empty folder is mounted
       # and the tool refuses for want of the lane's file.
       - ${VAULT_HOST_DIR:-./logs/no-vault}:/vault
+      # Where the database's dumps go (the nightly job, backup_db). Outside the working copy unless
+      # .env says otherwise: the repo is public, and a dump inside it is one `git add` away from it.
+      - ${BACKUP_HOST_DIR:-~/Backups/golaiet}:/backups
     environment:   # the app's own, repeated: a service's environment replaces the anchor's, it does not add to it
       DB_HOST: db
       DB_PORT: "5432"
       DJANGO_DEBUG: "false"
       CLAUDE_CONFIG_DIR: /root/.claude
       VAULT_DIR: /vault
+      BACKUP_DIR: /backups
 
   web:
     <<: *app

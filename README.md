@@ -20,9 +20,12 @@ steps and where each stands are in
 
 ## Operating it
 
-**Bringing the running stack to the code in this folder.** `make stack`
-rebuilds the images and runs the migrations. A job that code seeds (the
-Friday `brief` is one) exists only after `seed_jobs` has run once:
+**Bringing the running stack to the code in this folder**, while the stack
+runs on this machine. `make stack` rebuilds the images and runs the
+migrations. A job that code seeds (the Friday `brief` and the nightly
+`backup` are two) exists only after `seed_jobs` has run once. A host is
+brought to `origin/main` from the Mac by `./deploy.sh` instead
+([docs/ops/HOST.md](docs/ops/HOST.md)):
 
 ```bash
 make stack
@@ -32,7 +35,8 @@ make smoke
 
 **The vault, for notes.** `add_note` writes only when `VAULT_HOST_DIR` in
 `.env` names the vault's folder, and Docker Desktop shares that folder
-(Settings › Resources › File sharing). Unset, the tool refuses.
+(Settings › Resources › File sharing). Unset, the tool refuses. The vault
+stays on the Mac: on a host the tool is off.
 
 **Running one job by hand.** Any job, by its name in admin:
 
@@ -64,68 +68,37 @@ unset DB_NAME
 docker exec golaiet-db sh -c 'dropdb -U "$POSTGRES_USER" golaiet_scratch'
 ```
 
-**The watcher and the nightly dump** run outside the stack, under launchd.
-Nothing in this repo installs them. Before installing, `command -v docker`
-must print a folder the plists' `PATH` lists (`/usr/local/bin`,
-`/opt/homebrew/bin`, `/usr/bin`, `/bin`). A per-user install of Docker
-Desktop puts it in `~/.docker/bin`: add that folder, by its full path, to
-the `PATH` string in `ops/com.golaiet.backup.plist` first, or every dump
-fails. The plists also name this folder by its full path; edit them if the
-repo moves.
+**Where it runs.** On the Mac, since 2026-10-10 and still on 2026-11-24.
+Guy has decided to move the running stack to an always-on host; what that
+takes is built and has not yet met a host. After the move the Mac is where
+the code is developed, and its database is a marked copy on which no
+scheduler starts. [docs/ops/HOST.md](docs/ops/HOST.md) is the whole of it:
+what a host needs, the night of the move, a deploy and going back, and
+what is not proven until there is a host.
+
+**Backups.** A job of the stack, `backup`, dumps the database every night
+into the folder `BACKUP_HOST_DIR` names (`~/Backups/golaiet` when unset),
+thirty days kept, each dump with its row counts beside it. One by hand:
 
 ```bash
-mkdir -p logs ~/Backups/golaiet
-cp ops/com.golaiet.watch.plist ops/com.golaiet.backup.plist ~/Library/LaunchAgents/
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.golaiet.watch.plist
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.golaiet.backup.plist
-launchctl kickstart gui/$(id -u)/com.golaiet.watch     # one run now: a line appears in logs/watch.log
-launchctl kickstart gui/$(id -u)/com.golaiet.backup    # one dump now: a file in ~/Backups/golaiet, an `ok` line in logs/backup.log
+docker compose exec scheduler python manage.py backup_db
 ```
 
-`bootstrap` fails on an agent that is already loaded. After editing a plist,
-copy it again, `bootout` the agent (below) and `bootstrap` it again.
-
-The order the first time: install and take the first dump as above, which
-is also the dump taken before the stack changes; then `make stack` and
-`seed_jobs`; then the reboot that shows the stack comes back by itself.
-
-**Seeing a notification.** The watcher speaks through `osascript`, which
-macOS lists as Script Editor under System Settings › Notifications. The
-first one may ask to be allowed, and a Focus hides it. To see one without
-waiting for a stale heartbeat, point one run at an address nothing answers
-on (it adds an `unreachable` line to `logs/watch.log`):
+**Restoring a dump, or copying the database from another machine**, is
+`pull_db`, run where the database is replaced. The dump is restored into a
+new database beside the live one, compared with the counts it wrote down,
+and swapped in by name; the database that was there is kept under a dated
+name. The result is a marked copy unless `--takeover` is given:
 
 ```bash
-HEALTH_URL=http://127.0.0.1:9/ ops/watch.sh
+docker compose rm --stop --force scheduler
+docker compose run --rm scheduler python manage.py pull_db /backups/<the dump> --takeover --replace
+docker compose up -d
 ```
 
-With the scheduler stopped (`docker compose stop scheduler`), the hourly run
-notifies once the last heartbeat is 90 minutes old; `MAX_AGE_MINUTES=1
-ops/watch.sh` a few minutes after stopping shows the same notification
-without the wait. Start it again with `docker compose start scheduler`.
-
-**Restoring a dump**, into a database of its own beside the live one, and
-comparing the row counts of the five tables that hold what cannot be
-rebuilt. The restored counts are the live ones as of the dump: the live
-side is ahead only by what was written since, in any of the five (trackers,
-observations, assessments, messages, job runs).
-
-```bash
-counts="select 'core_tracker', count(*) from core_tracker union all select 'core_observation', count(*) from core_observation union all select 'core_assessment', count(*) from core_assessment union all select 'chat_message', count(*) from chat_message union all select 'scheduler_jobrun', count(*) from scheduler_jobrun"
-docker exec golaiet-db sh -c 'createdb -U "$POSTGRES_USER" golaiet_restore'
-docker exec -i golaiet-db sh -c 'pg_restore -U "$POSTGRES_USER" -d golaiet_restore' < ~/Backups/golaiet/golaiet-<day>.dump
-docker exec golaiet-db sh -c 'psql -U "$POSTGRES_USER" -d golaiet_restore -Atc "$0"' "$counts"
-docker exec golaiet-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "$0"' "$counts"
-docker exec golaiet-db sh -c 'dropdb -U "$POSTGRES_USER" golaiet_restore'
-```
-
-To remove the two agents:
-
-```bash
-launchctl bootout gui/$(id -u)/com.golaiet.watch
-launchctl bootout gui/$(id -u)/com.golaiet.backup
-rm ~/Library/LaunchAgents/com.golaiet.watch.plist ~/Library/LaunchAgents/com.golaiet.backup.plist
-```
+**Knowing that it is down.** With `HEARTBEAT_PING_URL` set, the heartbeat
+calls that address every half hour, and a service outside the stack alerts
+when the calls stop.
 
 ## Why one project
 
@@ -151,6 +124,7 @@ once. See [docs/VISION.md](docs/VISION.md).
 | [docs/LINEAGE.md](docs/LINEAGE.md) | What is taken from each existing project, and the lessons carried forward with their receipts |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Phases with exit criteria and explicit non-goals per phase |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Open decisions with a recommendation each, awaiting Guy |
+| [docs/ops/HOST.md](docs/ops/HOST.md) | The machine the stack runs on: what it needs, moving to it, deploying, backups, copies, and what is unproven until there is one |
 
 ## Relationship to the existing repos
 

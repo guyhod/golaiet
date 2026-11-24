@@ -29,5 +29,5 @@ dashboard/tsconfig.tsbuildinfo
 dashboard/test-results/
 dashboard/playwright-report/
 
-# Watcher and backup logs (ops/)
+# Folders the compose files mount when .env names no other: an empty vault, the end-to-end stack's backups
 logs/

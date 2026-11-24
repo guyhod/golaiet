@@ -14,6 +14,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Treat a bump as a change: upgrade, rerun the probe, then keep it.
 RUN npm install -g @anthropic-ai/claude-code@2.1.296
 
+# Postgres' client tools, for the database's dump (core/backup.py): pg_dump refuses a server newer
+# than itself, and an archive written by a newer pg_dump is not read by an older pg_restore, so the
+# major version is the db service's in docker-compose.yml (a test compares the two files). Debian's
+# own package follows the Debian release and not the server, hence Postgres' repository. Its signing
+# key and the script that adds it come inside Debian's postgresql-common package, so the key is the
+# one Debian ships and nothing is fetched to be trusted; the script reads the release's name itself.
+RUN apt-get update && apt-get install -y --no-install-recommends postgresql-common \
+    && /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y \
+    && apt-get install -y --no-install-recommends postgresql-client-16 \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY requirements.txt .

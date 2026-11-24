@@ -41,7 +41,10 @@ def _send(alerts) -> int:
             alert.delivery_error = ""
             sent += 1
         else:
-            alert.delivery_error = "telegram not configured" if not telegram.configured() else "sendMessage failed; see the scheduler log"
+            alert.delivery_error = (
+                "sendMessage failed; see the scheduler log" if telegram.configured()
+                else "this database is a copy, or whether it is could not be read: a copy sends nothing" if telegram.has_credentials()
+                else "telegram not configured")
             log.warning("alert %s for %s not delivered: %s", alert.pk, alert.tracker.slug, alert.delivery_error)
         alert.save(update_fields=["delivered_at", "delivery_error"])
     return sent

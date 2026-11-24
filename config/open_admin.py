@@ -1,8 +1,14 @@
 """The admin without a login. Guy is the one operator, and the stack listens
-on 127.0.0.1 alone (docker-compose binds the dashboard to 127.0.0.1:8003), so
-a request that reaches /admin/ comes from his Mac. He asked on 2026-11-02 for
-the admin open with no password for now. The operator is a real user row so
-the admin's log of changes has someone to name."""
+on the machine's own address alone (docker-compose binds the dashboard to
+127.0.0.1:8003). He asked on 2026-11-02 for the admin open with no password,
+and said on 2026-11-24 that it stays so when the stack moves to a host.
+
+On the Mac that means a request that reaches /admin/ comes from the Mac. On
+a host the private network's proxy hands the dashboard's port on, so the
+admin is open, to read and to write every row, to every device on that
+network: a machine or a person that is not Guy's is not let onto it while
+this stands. The operator is a real user row so the admin's log of changes
+has someone to name."""
 from django.contrib.auth import get_user_model
 
 OPERATOR = "guy"

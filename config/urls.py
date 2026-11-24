@@ -3,6 +3,7 @@ from django.http import HttpResponse
 from django.urls import path
 
 from agent import prompts
+from api import dump
 from api.api import api
 
 
@@ -15,5 +16,6 @@ def system_prompts(request):
 urlpatterns = [
     path("admin/prompts/", system_prompts),
     path("admin/", admin.site.urls),
+    path("api/dump", dump.dump),
     path("api/", api.urls),
 ]

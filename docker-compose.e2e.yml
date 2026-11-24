@@ -18,10 +18,13 @@ services:
       CLAUDE_BIN: /app/tests/e2e/fake_claude.py
       CLAUDE_CODE_OAUTH_TOKEN: ""
       ANTHROPIC_API_KEY: ""
+      DUMP_TOKEN: a-test-value-that-guards-nothing-outside-the-e2e-stack
     volumes:
       - ./tests:/app/tests:ro
       # Never the real vault, whatever VAULT_HOST_DIR is in .env: the same mount point, an empty folder.
       - ./logs/no-vault:/vault
+      # Never the real backup folder either: a run's dumps are test data, and the real folder holds real ones.
+      - ./logs/e2e-backups:/backups
     depends_on:
       telegram:
         condition: service_started
@@ -29,6 +32,10 @@ services:
   web:
     container_name: golaiet-e2e-web
     restart: "no"
+    environment:
+      DUMP_TOKEN: a-test-value-that-guards-nothing-outside-the-e2e-stack
+      # The in-stack check pulls through nginx by the dashboard's name on the compose network.
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,dashboard
 
   dashboard:
     container_name: golaiet-e2e-dashboard

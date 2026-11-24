@@ -20,6 +20,7 @@ class Job(models.Model):
         ASSESS = "assess"        # a tracker's judge (next phase)
         DIGEST = "digest"        # cross-tracker summary (later phase)
         HEARTBEAT = "heartbeat"  # liveness record
+        BACKUP = "backup"        # the nightly dump of the database
 
     class Trigger(models.TextChoices):
         INTERVAL = "interval"

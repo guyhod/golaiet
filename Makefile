@@ -1,13 +1,20 @@
 PY := ./.venv/bin/python
 E2E := docker compose -p golaiet-e2e -f docker-compose.yml -f docker-compose.e2e.yml
 
-.PHONY: up stack logs down migrate run scheduler dashboard-dev check test test-dashboard smoke e2e superuser shell
+.PHONY: up stack stack-without-scheduler deploy logs down migrate run scheduler dashboard-dev check test test-dashboard smoke e2e superuser shell
 
 up:            ## Postgres only (host dev: make run / make scheduler)
 	docker compose up -d db
 
 stack:         ## the whole stack in compose (db + scheduler + web + dashboard on 8003)
 	docker compose up -d --build
+
+stack-without-scheduler:  ## the stack on a database that is a copy (pull_db): everything but the scheduler, which refuses a copy
+	docker compose up -d --build db web dashboard
+	docker compose rm --stop --force scheduler
+
+deploy:        ## bring the host to origin/main, from this Mac (./deploy.sh <commit> goes back; see the script's first lines)
+	PY=$(PY) ./deploy.sh
 
 logs:
 	docker compose logs -f scheduler web dashboard
@@ -46,6 +53,7 @@ smoke:         ## the compose stack answers: run after make stack (SMOKE_URL ove
 e2e:           ## the real chain with Claude and Telegram faked: a fresh stack on 8013, Playwright at the screen
 	$(E2E) down -v --remove-orphans
 	$(E2E) up -d --build --wait
+	$(E2E) exec -T scheduler python -m tests.e2e.stack_check
 	$(E2E) run --rm migrate python manage.py seed_jobs
 	cd dashboard && npx playwright test; status=$$?; cd ..; \
 	  if [ $$status -ne 0 ]; then $(E2E) logs scheduler telegram; fi; \

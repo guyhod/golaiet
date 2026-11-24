@@ -7,11 +7,18 @@ is long polling (getUpdates with a 30 s wait): no public URL, no webhook.
 
 The credentials are the switch: both set means on, either missing means off.
 No separate flag, because a flag can be on while the token is absent and
-that state reads as a working channel silently dropping everything."""
+that state reads as a working channel silently dropping everything.
+
+A copy of the live database is the one case where both are set and the
+channel is still off: its `.env` may hold the live bot's token, and a flow or
+an alert run by hand there would write to Guy from stale rows."""
 import logging
 
 import httpx
 from django.conf import settings
+from django.db import Error as DatabaseError
+
+from core import standing
 
 log = logging.getLogger(__name__)
 
@@ -19,8 +26,21 @@ MAX_MESSAGE_LEN = 4000
 POLL_WAIT_SEC = 30
 
 
-def configured() -> bool:
+def has_credentials() -> bool:
     return bool(settings.TELEGRAM_BOT_TOKEN and settings.TELEGRAM_CHAT_ID)
+
+
+def configured() -> bool:
+    """On when both credentials are set and this database is not a copy. A
+    mark that cannot be read counts as a mark: sending nothing is the mistake
+    that can be put right."""
+    if not has_credentials():
+        return False
+    try:
+        return standing.copy_mark() is None
+    except DatabaseError as failure:
+        log.warning("telegram is off: whether this database is a copy could not be read (%s)", type(failure).__name__)
+        return False
 
 
 def _url(method: str) -> str:

@@ -9,3 +9,4 @@ staticfiles
 dashboard
 docs
 tests
+logs

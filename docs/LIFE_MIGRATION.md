@@ -403,6 +403,8 @@ Desktop starts at login, and the Mac does not sleep while on power.
 a log, and shows a notification when the heartbeat is older than 90
 minutes. `ops/backup.sh` under launchd, nightly: `pg_dump` through the `db`
 container into a folder outside the repo, 30 days kept.
+(The two scripts left the repo on 2026-11-24: the nightly `backup` job and the heartbeat's outside call
+stand in their place. [ops/HOST.md](ops/HOST.md), section 11, says which replaced which.)
 
 **Exit check:** after a reboot the stack returns by itself and the
 heartbeat is fresh within 35 minutes; with the scheduler stopped by hand a

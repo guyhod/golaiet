@@ -336,25 +336,52 @@ that, and the scheduler bounds parallelism anyway.
 
 ## 8. Deployment
 
-Mac first, as the other two. Ports chosen not to collide: PostgreSQL 5435,
-dashboard 8003 (Django behind it), Vite dev 5174 (Organism uses 5432;
-investment_engine 5433, 8000, 8001; conflict map 5434, 8002, 5173). Everything
-runs under `docker compose` (`make stack`): `db`, `migrate`, `web`,
-`scheduler` (the Claude CLI inside, on the plan OAuth token, session store on
-the `claude_state` volume) and `dashboard`. Running since 2026-10-10. Moving
-to a NUC or VM follows investment_engine's `docs/ops/HOST_SPEC.md`.
+One compose stack, on one machine. Since 2026-10-10 that machine has been
+the Mac, and on 2026-11-24 it still is; Guy has decided to move it to an
+always-on host, and everything for that is built (`docs/ops/HOST.md`) and
+has not yet met a host. After the move the Mac is where the code is
+developed, and its database is a marked copy.
+
+Ports chosen not to collide on the Mac: PostgreSQL 5435, dashboard 8003
+(Django behind it), Vite dev 5174 (Organism uses 5432; investment_engine
+5433, 8000, 8001; conflict map 5434, 8002, 5173). Everything runs under
+`docker compose` (`make stack`): `db`, `migrate`, `web`, `scheduler` (the
+Claude CLI inside, on the plan OAuth token, session store on the
+`claude_state` volume) and `dashboard`. The dashboard is published on the
+machine's own address alone; on a host, the private network's proxy hands
+it on to Guy's devices. The admin has no login.
 
 The vault is mounted into `scheduler` alone, at `/vault` (`VAULT_HOST_DIR`
 in `.env`; unset, an empty folder), for `add_note` and nothing else. The
-end-to-end stack always mounts the empty folder.
+end-to-end stack always mounts the empty folder. The vault does not move
+to a host.
 
-Two things run outside compose, under launchd, because nothing inside the
-stack can report that the stack is down or restore a database that is gone:
-`ops/watch.sh` (hourly: reads `/api/health`, logs a line, shows a macOS
-notification when the stack does not answer or the heartbeat is older than
-90 minutes) and `ops/backup.sh` (nightly: `pg_dump` through the `db`
-container into `~/Backups/golaiet`, 30 days kept). Both log to `logs/`.
-Installing them is in the README.
+**One live system.** Two facts about a database are kept by Postgres itself
+and in no table (`core/standing.py`). The scheduler holds an advisory lock
+for as long as it lives, so a second scheduler on the same database
+refuses, and anything can read whether one is alive. And a copy of the
+live database carries a comment on the database, the mark: on a marked
+database the scheduler refuses to start, stops if it finds the mark on a
+later tick, and Telegram counts as not configured. A copy holds the live
+one's bot token and chat, and without the mark it would be a second live
+system on the same bot.
+
+**Dumps and copies.** `core/backup.py` writes the whole database as one
+`pg_dump` archive with its row counts beside it, counted in the dump's own
+snapshot: the nightly `backup` job (thirty days kept in a mounted folder
+outside the working copy), `backup_db` by hand, and `GET /api/dump` for
+another machine that holds the token. `pull_db <file or address>` replaces
+a machine's database with a dump: restored into a new database beside the
+live one, checked and migrated there, marked as a copy unless `--takeover`
+is said, and only then swapped in by name; the database that was there is
+kept. Every statement on a whole database is in `core/restore.py`.
+
+**Knowing that it is down.** Nothing inside the stack can report that the
+stack is down, so the heartbeat calls an outside address when one is set
+(`HEARTBEAT_PING_URL`), and a service there alerts when the calls stop.
+
+**Deploying** to a host is `deploy.sh`, run on the Mac: it brings the host
+to `origin/main` after a dump, and checks it from the Mac.
 
 Telegram long polling needs no public URL, no ngrok and no webhook secret.
 Alerts are enabled by the presence of the bot token and chat id, never by a

@@ -1,6 +1,7 @@
-"""Django settings. Everything deploy-specific comes from the environment
-(.env at the repo root via python-dotenv), so the same tree runs on the Mac
-and in docker compose."""
+"""Django settings. Everything that differs between machines comes from the
+environment (.env at the repo root via python-dotenv), so the same tree runs
+as host processes on the Mac, in docker compose there, and in docker compose
+on a host. What .env holds, by name, is in .env.template and docs/ops/HOST.md."""
 import os
 from pathlib import Path
 
@@ -86,6 +87,16 @@ STORAGES = {
 }
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Where dumps of the database are written (backup_db, the nightly job). In docker compose this is
+# the mounted backup folder; empty, the command asks for a folder and the job fails saying so.
+BACKUP_DIR = os.getenv("BACKUP_DIR", "")
+# The secret two machines of Guy's share so that one can hand the other its whole database
+# (api/dump.py serves, pull_db fetches). Unset, this side serves no dump and pulls from no address.
+DUMP_TOKEN = os.getenv("DUMP_TOKEN", "")
+# An address outside the stack that the heartbeat calls every half hour, so that a service there can
+# tell Guy when the calls stop. Whoever holds it can keep that alarm quiet: it is never logged.
+HEARTBEAT_PING_URL = os.getenv("HEARTBEAT_PING_URL", "")
 
 # --- Telegram (the presence of both values is the switch; no separate flag) ---
 # Where the Bot API lives. The end-to-end stack points it at tests/e2e/fake_telegram.py.
